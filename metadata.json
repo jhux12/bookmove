@@ -1,0 +1,8 @@
+{
+  "name": "Checkmate — Chess Bots & Practice",
+  "description": "Play against AI chess bots, drill tactics and endgames, review games, and customize your board and pieces.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

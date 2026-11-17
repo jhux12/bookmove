@@ -1,0 +1,138 @@
+import { BoardTheme, BoardThemeId, PieceSetId, PieceSetMeta, TimeControl, UserPreferences } from '../types/chess';
+
+export const BOARD_THEMES: Record<BoardThemeId, BoardTheme> = {
+  'tournament-green': {
+    id: 'tournament-green',
+    name: 'Tournament Green',
+    lightSquare: '#EEEED2',
+    darkSquare: '#769656',
+    highlightLight: '#F6F669',
+    highlightDark: '#BACA2B',
+    frameColor: '#211F1C',
+    coordOnLight: '#769656',
+    coordOnDark: '#EEEED2',
+  },
+  'walnut-wood': {
+    id: 'walnut-wood',
+    name: 'Walnut Wood',
+    lightSquare: '#F0D9B5',
+    darkSquare: '#B58863',
+    highlightLight: '#F7EC74',
+    highlightDark: '#DAC34B',
+    frameColor: '#3A281E',
+    coordOnLight: '#9A6F4D',
+    coordOnDark: '#F0D9B5',
+  },
+  'tournament-slate': {
+    id: 'tournament-slate',
+    name: 'Nordic Slate',
+    lightSquare: '#E2E8F0',
+    darkSquare: '#7C93A6',
+    highlightLight: '#F3DF8A',
+    highlightDark: '#C9AE4B',
+    frameColor: '#161E29',
+    coordOnLight: '#5C7285',
+    coordOnDark: '#E2E8F0',
+  },
+  'ocean-glass': {
+    id: 'ocean-glass',
+    name: 'Ocean Glass',
+    lightSquare: '#D6E4E5',
+    darkSquare: '#497174',
+    highlightLight: '#B4DFCE',
+    highlightDark: '#59A38F',
+    frameColor: '#1B2E30',
+    coordOnLight: '#497174',
+    coordOnDark: '#D6E4E5',
+  },
+  'espresso-mahogany': {
+    id: 'espresso-mahogany',
+    name: 'Espresso Mahogany',
+    lightSquare: '#E6D5C3',
+    darkSquare: '#6E473B',
+    highlightLight: '#ECD588',
+    highlightDark: '#B38E3D',
+    frameColor: '#281915',
+    coordOnLight: '#6E473B',
+    coordOnDark: '#E6D5C3',
+  },
+  'midnight-charcoal': {
+    id: 'midnight-charcoal',
+    name: 'Midnight Charcoal',
+    lightSquare: '#6B6866',
+    darkSquare: '#3D3B39',
+    highlightLight: '#8EA25D',
+    highlightDark: '#6A7B40',
+    frameColor: '#191817',
+    coordOnLight: '#242220',
+    coordOnDark: '#A3A09C',
+  },
+  'marble-onyx': {
+    id: 'marble-onyx',
+    name: 'Marble & Onyx',
+    lightSquare: '#F4F4F0',
+    darkSquare: '#5C5C58',
+    highlightLight: '#E7E489',
+    highlightDark: '#A8A647',
+    frameColor: '#1E1E1C',
+    coordOnLight: '#5C5C58',
+    coordOnDark: '#F4F4F0',
+  },
+  'royal-burgundy': {
+    id: 'royal-burgundy',
+    name: 'Royal Burgundy',
+    lightSquare: '#F2DFDF',
+    darkSquare: '#8A3C43',
+    highlightLight: '#F3DC86',
+    highlightDark: '#B97843',
+    frameColor: '#2E1619',
+    coordOnLight: '#8A3C43',
+    coordOnDark: '#F2DFDF',
+  },
+};
+
+export const PIECE_SETS: Record<PieceSetId, PieceSetMeta> = {
+  staunton: {
+    id: 'staunton',
+    name: 'Staunton Classic',
+    description: 'Clean tournament silhouettes modeled after classic club sets.',
+  },
+  modern: {
+    id: 'modern',
+    name: 'Modern Minimal',
+    description: 'Sharp geometric forms with contemporary architectural lines.',
+  },
+  royal: {
+    id: 'royal',
+    name: 'Royal Serif',
+    description: 'Ornate sculpted crowns, double collars, and heritage detail.',
+  },
+  bold: {
+    id: 'bold',
+    name: 'Bold Club',
+    description: 'Thick contours and high-contrast fills for rapid blitz recognition.',
+  },
+  glass: {
+    id: 'glass',
+    name: 'Ivory & Obsidian',
+    description: 'Warm ivory and smoked obsidian gradients with subtle gold rims.',
+  },
+};
+
+export const TIME_CONTROLS: TimeControl[] = [
+  { id: 'unlimited', label: 'Unlimited', initialSeconds: 0, incrementSeconds: 0 },
+  { id: 'blitz-3-2', label: '3 | 2 Blitz', initialSeconds: 180, incrementSeconds: 2 },
+  { id: 'blitz-5', label: '5 min Blitz', initialSeconds: 300, incrementSeconds: 0 },
+  { id: 'rapid-10', label: '10 min Rapid', initialSeconds: 600, incrementSeconds: 0 },
+  { id: 'rapid-15-10', label: '15 | 10 Rapid', initialSeconds: 900, incrementSeconds: 10 },
+];
+
+export const DEFAULT_PREFERENCES: UserPreferences = {
+  boardTheme: 'tournament-slate',
+  pieceSet: 'staunton',
+  coordinates: 'inside',
+  showLegalMoves: true,
+  soundEnabled: true,
+  animationSpeed: 'snappy',
+  showEvalBar: true,
+};

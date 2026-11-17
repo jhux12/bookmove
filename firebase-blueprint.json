@@ -1,0 +1,279 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Authenticated learner profile, active subscription plan, and board customization preferences.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "subscriptionTier": {
+          "type": "string",
+          "enum": ["free", "pro", "master"]
+        },
+        "billingCycle": {
+          "type": "string",
+          "enum": ["monthly", "annual"]
+        },
+        "subscriptionStatus": {
+          "type": "string",
+          "enum": ["active", "canceled"]
+        },
+        "boardTheme": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "pieceSet": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "coordinates": {
+          "type": "string",
+          "enum": ["inside", "outside", "hidden"]
+        },
+        "showLegalMoves": {
+          "type": "boolean"
+        },
+        "soundEnabled": {
+          "type": "boolean"
+        },
+        "animationSpeed": {
+          "type": "string",
+          "enum": ["instant", "snappy", "smooth"]
+        },
+        "showEvalBar": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "email",
+        "subscriptionTier",
+        "billingCycle",
+        "subscriptionStatus",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "LineProgress": {
+      "title": "Opening Line Mastery Progress",
+      "description": "Tracks spaced-repetition mastery, accuracy streaks, and review timing for a specific opening variation.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "courseId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "lineId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "attempts": {
+          "type": "integer"
+        },
+        "mistakes": {
+          "type": "integer"
+        },
+        "streak": {
+          "type": "integer"
+        },
+        "masteryPct": {
+          "type": "integer"
+        },
+        "nextReviewMs": {
+          "type": "integer"
+        },
+        "lastPracticedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "weakPlies": {
+          "type": "string",
+          "maxLength": 200,
+          "pattern": "^[0-9:,]*$"
+        }
+      },
+      "required": [
+        "userId",
+        "courseId",
+        "lineId",
+        "attempts",
+        "mistakes",
+        "streak",
+        "masteryPct",
+        "nextReviewMs",
+        "lastPracticedAt"
+      ]
+    },
+    "CustomLine": {
+      "title": "Custom Opening Repertoire Line",
+      "description": "User-authored opening line saved for interactive memorization and drilling.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "playerColor": {
+          "type": "string",
+          "enum": ["w", "b"]
+        },
+        "moves": {
+          "type": "array"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "playerColor",
+        "moves",
+        "notes",
+        "createdAt"
+      ]
+    },
+    "ArchivedGameRecord": {
+      "title": "Archived Bot Game",
+      "description": "Completed bot match summary and PGN stored under the owner user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "botId": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "botName": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "botElo": {
+          "type": "integer"
+        },
+        "playerColor": {
+          "type": "string",
+          "enum": ["w", "b"]
+        },
+        "result": {
+          "type": "string",
+          "enum": ["win", "loss", "draw"]
+        },
+        "termination": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "openingName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "moveCount": {
+          "type": "integer"
+        },
+        "pgn": {
+          "type": "string",
+          "maxLength": 8000
+        },
+        "assistMode": {
+          "type": "string",
+          "enum": ["challenge", "friendly", "coach"]
+        },
+        "timeControlLabel": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "playedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "botId",
+        "botName",
+        "botElo",
+        "playerColor",
+        "result",
+        "termination",
+        "openingName",
+        "moveCount",
+        "pgn",
+        "assistMode",
+        "timeControlLabel",
+        "playedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Private user account, subscription state, and UI preferences."
+    },
+    "/users/{userId}/lineProgress/{lineId}": {
+      "schema": {
+        "$ref": "#/entities/LineProgress"
+      },
+      "description": "Spaced-repetition drill progress for each opening variation."
+    },
+    "/users/{userId}/customLines/{lineId}": {
+      "schema": {
+        "$ref": "#/entities/CustomLine"
+      },
+      "description": "User-authored opening lines for Pro/Master members."
+    },
+    "/users/{userId}/games/{gameId}": {
+      "schema": {
+        "$ref": "#/entities/ArchivedGameRecord"
+      },
+      "description": "Archived bot games and sparring sessions."
+    }
+  }
+}

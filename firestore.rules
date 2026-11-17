@@ -1,0 +1,342 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll([
+        'uid',
+        'displayName',
+        'email',
+        'subscriptionTier',
+        'billingCycle',
+        'subscriptionStatus',
+        'createdAt',
+        'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'uid',
+        'displayName',
+        'email',
+        'subscriptionTier',
+        'billingCycle',
+        'subscriptionStatus',
+        'boardTheme',
+        'pieceSet',
+        'coordinates',
+        'showLegalMoves',
+        'soundEnabled',
+        'animationSpeed',
+        'showEvalBar',
+        'createdAt',
+        'updatedAt'
+      ])
+      && data.uid is string
+      && data.uid == userId
+      && data.uid == request.auth.uid
+      && data.displayName is string
+      && data.displayName.size() >= 1
+      && data.displayName.size() <= 80
+      && data.email is string
+      && data.email.size() >= 3
+      && data.email.size() <= 160
+      && data.subscriptionTier in ['free', 'pro', 'master']
+      && data.billingCycle in ['monthly', 'annual']
+      && data.subscriptionStatus in ['active', 'canceled']
+      && (!('boardTheme' in data) || (data.boardTheme is string && data.boardTheme.size() <= 40))
+      && (!('pieceSet' in data) || (data.pieceSet is string && data.pieceSet.size() <= 40))
+      && (!('coordinates' in data) || data.coordinates in ['inside', 'outside', 'hidden'])
+      && (!('showLegalMoves' in data) || data.showLegalMoves is bool)
+      && (!('soundEnabled' in data) || data.soundEnabled is bool)
+      && (!('animationSpeed' in data) || data.animationSpeed in ['instant', 'snappy', 'smooth'])
+      && (!('showEvalBar' in data) || data.showEvalBar is bool)
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidLineProgress(data, userId, lineId) {
+      return data.keys().hasAll([
+        'userId',
+        'courseId',
+        'lineId',
+        'attempts',
+        'mistakes',
+        'streak',
+        'masteryPct',
+        'nextReviewMs',
+        'lastPracticedAt'
+      ])
+      && data.keys().hasOnly([
+        'userId',
+        'courseId',
+        'lineId',
+        'attempts',
+        'mistakes',
+        'streak',
+        'masteryPct',
+        'nextReviewMs',
+        'lastPracticedAt',
+        'weakPlies'
+      ])
+      && data.userId is string
+      && data.userId == userId
+      && data.userId == request.auth.uid
+      && data.courseId is string
+      && data.courseId.size() >= 1
+      && data.courseId.size() <= 64
+      && data.courseId.matches('^[a-zA-Z0-9_\\-]+$')
+      && data.lineId is string
+      && data.lineId == lineId
+      && data.lineId.size() >= 1
+      && data.lineId.size() <= 64
+      && data.lineId.matches('^[a-zA-Z0-9_\\-]+$')
+      && data.attempts is int
+      && data.attempts >= 0
+      && data.attempts <= 100000
+      && data.mistakes is int
+      && data.mistakes >= 0
+      && data.mistakes <= 100000
+      && data.streak is int
+      && data.streak >= 0
+      && data.streak <= 10000
+      && data.masteryPct is int
+      && data.masteryPct >= 0
+      && data.masteryPct <= 100
+      && data.nextReviewMs is int
+      && data.nextReviewMs >= 0
+      && data.lastPracticedAt is timestamp
+      && (!('weakPlies' in data) || (data.weakPlies is string && data.weakPlies.size() <= 200 && data.weakPlies.matches('^[0-9:,]*$')));
+    }
+
+    function isValidCustomLine(data, userId) {
+      return data.keys().hasAll([
+        'userId',
+        'name',
+        'playerColor',
+        'moves',
+        'notes',
+        'createdAt'
+      ])
+      && data.keys().hasOnly([
+        'userId',
+        'name',
+        'playerColor',
+        'moves',
+        'notes',
+        'createdAt'
+      ])
+      && data.userId is string
+      && data.userId == userId
+      && data.userId == request.auth.uid
+      && data.name is string
+      && data.name.size() >= 1
+      && data.name.size() <= 80
+      && data.playerColor in ['w', 'b']
+      && data.moves is list
+      && data.moves.size() >= 1
+      && data.moves.size() <= 40
+      && data.moves[0] is string
+      && data.moves[0].size() >= 2
+      && data.moves[0].size() <= 12
+      && data.notes is string
+      && data.notes.size() <= 300
+      && data.createdAt is timestamp;
+    }
+
+    function isValidArchivedGame(data, userId) {
+      return data.keys().hasAll([
+        'userId',
+        'botId',
+        'botName',
+        'botElo',
+        'playerColor',
+        'result',
+        'termination',
+        'openingName',
+        'moveCount',
+        'pgn',
+        'assistMode',
+        'timeControlLabel',
+        'playedAt'
+      ])
+      && data.keys().hasOnly([
+        'userId',
+        'botId',
+        'botName',
+        'botElo',
+        'playerColor',
+        'result',
+        'termination',
+        'openingName',
+        'moveCount',
+        'pgn',
+        'assistMode',
+        'timeControlLabel',
+        'playedAt'
+      ])
+      && data.userId is string
+      && data.userId == userId
+      && data.userId == request.auth.uid
+      && data.botId is string
+      && data.botId.size() >= 1
+      && data.botId.size() <= 40
+      && data.botId.matches('^[a-zA-Z0-9_\\-]+$')
+      && data.botName is string
+      && data.botName.size() >= 1
+      && data.botName.size() <= 60
+      && data.botElo is int
+      && data.botElo >= 100
+      && data.botElo <= 3500
+      && data.playerColor in ['w', 'b']
+      && data.result in ['win', 'loss', 'draw']
+      && data.termination is string
+      && data.termination.size() >= 1
+      && data.termination.size() <= 60
+      && data.openingName is string
+      && data.openingName.size() >= 1
+      && data.openingName.size() <= 120
+      && data.moveCount is int
+      && data.moveCount >= 0
+      && data.moveCount <= 500
+      && data.pgn is string
+      && data.pgn.size() <= 8000
+      && data.assistMode in ['challenge', 'friendly', 'coach']
+      && data.timeControlLabel is string
+      && data.timeControlLabel.size() >= 1
+      && data.timeControlLabel.size() <= 40
+      && data.playedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'subscriptionTier',
+            'billingCycle',
+            'subscriptionStatus',
+            'updatedAt'
+          ])
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'boardTheme',
+            'pieceSet',
+            'coordinates',
+            'showLegalMoves',
+            'soundEnabled',
+            'animationSpeed',
+            'showEvalBar',
+            'updatedAt'
+          ])
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName',
+            'updatedAt'
+          ])
+        );
+      allow delete: if false;
+
+      match /lineProgress/{lineId} {
+        allow get: if isValidId(userId) && isValidId(lineId) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(lineId)
+          && isOwner(userId)
+          && isValidLineProgress(incoming(), userId, lineId)
+          && incoming().lastPracticedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isValidId(userId)
+          && isValidId(lineId)
+          && isOwner(userId)
+          && isValidLineProgress(incoming(), userId, lineId)
+          && incoming().userId == existing().userId
+          && incoming().courseId == existing().courseId
+          && incoming().lineId == existing().lineId
+          && incoming().lastPracticedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'attempts',
+            'mistakes',
+            'streak',
+            'masteryPct',
+            'nextReviewMs',
+            'lastPracticedAt',
+            'weakPlies'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(lineId) && isOwner(userId);
+      }
+
+      match /customLines/{lineId} {
+        allow get: if isValidId(userId) && isValidId(lineId) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(lineId)
+          && isOwner(userId)
+          && isValidCustomLine(incoming(), userId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isValidId(userId)
+          && isValidId(lineId)
+          && isOwner(userId)
+          && isValidCustomLine(incoming(), userId)
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name',
+            'playerColor',
+            'moves',
+            'notes'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(lineId) && isOwner(userId);
+      }
+
+      match /games/{gameId} {
+        allow get: if isValidId(userId) && isValidId(gameId) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(gameId)
+          && isOwner(userId)
+          && isValidArchivedGame(incoming(), userId)
+          && incoming().playedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(gameId) && isOwner(userId);
+      }
+    }
+  }
+}
