@@ -174,6 +174,8 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
 
   useEffect(() => {
     if (sparringSeed) {
+      botGenerationRef.current++;
+      setSavedSession(null);
       if (botTimerRef.current) {
         window.clearTimeout(botTimerRef.current);
         botTimerRef.current = null;
@@ -194,6 +196,7 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
 
   useEffect(() => {
     if (newGameTrigger > 0) {
+      botGenerationRef.current++;
       if (botTimerRef.current) {
         window.clearTimeout(botTimerRef.current);
         botTimerRef.current = null;

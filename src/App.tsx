@@ -3,8 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Modal } from './components/ui/Modal';
+import { GAME_SESSION_KEY, readGameSession } from './utils/gameSession';
+
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
+const AttackTrainingView = lazy(() =>
+  import('./components/AttackTrainingView').then((m) => ({ default: m.AttackTrainingView }))
+);
 const CoursesView = lazy(() => import('./components/CoursesView').then((m) => ({ default: m.CoursesView })));
 const CustomizeView = lazy(() => import('./components/CustomizeView').then((m) => ({ default: m.CustomizeView })));
 const MembershipView = lazy(() => import('./components/MembershipView').then((m) => ({ default: m.MembershipView })));
@@ -62,7 +68,7 @@ export default function App() {
     deleteArchivedGameCloud,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>(() => { try { const tab = sessionStorage.getItem('checkmate_tab'); return ['courses','practice','play','customize','membership'].includes(tab ?? '') ? tab as ActiveTab : 'courses'; } catch { return 'courses'; } });
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => { try { const tab = sessionStorage.getItem('checkmate_tab'); return ['courses','training','practice','play','customize','membership'].includes(tab ?? '') ? tab as ActiveTab : 'courses'; } catch { return 'courses'; } });
   const [playMounted, setPlayMounted] = useState(activeTab === 'play');
   useEffect(() => {
     if (activeTab === 'play') setPlayMounted(true);
@@ -71,6 +77,7 @@ export default function App() {
   const [preferences, setPreferences] = useState<UserPreferences>(loadPreferences);
   const [localArchivedGames, setLocalArchivedGames] = useState<ArchivedGame[]>(loadArchive);
   const [newGameTrigger, setNewGameTrigger] = useState(0);
+  const [pendingSparringSeed, setPendingSparringSeed] = useState<SparringSeed | null>(null);
   const [sparringSeed, setSparringSeed] = useState<SparringSeed | null>(null);
   const [courseFocus, setCourseFocus] = useState<{
     courseId: string;
@@ -152,6 +159,10 @@ export default function App() {
   }, [user, cloudGames, deleteArchivedGameCloud]);
 
   const handleSparLine = useCallback((seed: SparringSeed) => {
+    if (readGameSession()) {
+      setPendingSparringSeed(seed);
+      return;
+    }
     setSparringSeed(seed);
     setActiveTab('play');
   }, []);
@@ -172,6 +183,7 @@ export default function App() {
 
   const navItems: { id: ActiveTab; label: string }[] = [
     { id: 'courses', label: 'Courses' },
+    { id: 'training', label: 'Attacks' },
     { id: 'practice', label: 'Practice' },
     { id: 'play', label: 'Play Bots' },
     { id: 'customize', label: 'Customize' },
@@ -285,6 +297,12 @@ export default function App() {
               </motion.div>
             )}
 
+            {activeTab === 'training' && (
+              <motion.div key="tab-training" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:0.18}}>
+                <AttackTrainingView preferences={preferences} onSparLine={handleSparLine}/>
+              </motion.div>
+            )}
+
             {activeTab === 'practice' && (
               <motion.div
                 key="tab-practice"
@@ -329,6 +347,31 @@ export default function App() {
           </AnimatePresence>
           </Suspense>
         </main>
+        {pendingSparringSeed && (
+          <Modal label="Replace your saved game?" onClose={() => setPendingSparringSeed(null)}>
+            <div className="p-6 space-y-4">
+              <h2 className="text-xl font-bold">You have an unfinished game</h2>
+              <p className="text-sm text-slate-300">
+                Starting bot practice from this lesson will replace your saved game.
+              </p>
+              <button autoFocus onClick={() => setPendingSparringSeed(null)}
+                className="min-h-11 w-full rounded-xl bg-[#E5A93C] text-slate-950 font-bold">
+                Keep current game
+              </button>
+              <button
+                onClick={() => {
+                  try { localStorage.removeItem(GAME_SESSION_KEY); }
+                  catch { /* The game can still be replaced in this tab. */ }
+                  setSparringSeed(pendingSparringSeed);
+                  setActiveTab('play');
+                  setPendingSparringSeed(null);
+                }}
+                className="min-h-11 w-full text-red-300">
+                Replace game and practice
+              </button>
+            </div>
+          </Modal>
+        )}
       </div>
     </MotionConfig>
   );

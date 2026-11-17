@@ -229,5 +229,5 @@ export interface UserAccountProfile {
   subscriptionStatus: SubscriptionStatus;
 }
 
-export type ActiveTab = 'courses' | 'practice' | 'play' | 'customize' | 'membership';
+export type ActiveTab = 'courses' | 'training' | 'practice' | 'play' | 'customize' | 'membership';
 
