@@ -1,3 +1,6 @@
+import { requestBotMove } from '../engine/botClient';
+import { Modal } from './ui/Modal';
+import { GAME_SESSION_KEY, readGameSession, recordsFromGame } from '../utils/gameSession';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
 import { AnimatePresence, motion } from 'motion/react';
@@ -14,7 +17,6 @@ import {
 import { BOTS, pickDialogue } from '../data/bots';
 import { BOARD_THEMES, TIME_CONTROLS } from '../data/themes';
 import {
-  chooseBotMove,
   getCapturedPieces,
   getPositionEvaluation,
   getRankedMoves,
@@ -80,6 +82,11 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
   const [assistMode, setAssistMode] = useState<AssistMode>('friendly');
   const [timeControl, setTimeControl] = useState<TimeControl>(TIME_CONTROLS[0]);
 
+  const [savedSession, setSavedSession] = useState(readGameSession);
+  const [resumePromptOpen, setResumePromptOpen] = useState(true);
+  const [confirmAction, setConfirmAction] = useState<'new' | 'resign' | null>(null);
+  const [storageError, setStorageError] = useState(false);
+  const resumeBotRef = useRef(false);
   const [phase, setPhase] = useState<MatchPhase>('SETUP');
   const [playerColor, setPlayerColor] = useState<PieceColor>('w');
   const [orientation, setOrientation] = useState<PieceColor>('w');
@@ -113,9 +120,47 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
   const [showResultModal, setShowResultModal] = useState(false);
 
   const lastSavedGameRef = useRef<ArchivedGame | null>(null);
+  const botGenerationRef = useRef(0);
   const botTimerRef = useRef<number | null>(null);
   const modalTimerRef = useRef<number | null>(null);
   const matchIdRef = useRef<string>('');
+
+  useEffect(() => {
+    if (phase !== 'PLAYING') return;
+    try {
+      localStorage.setItem(GAME_SESSION_KEY, JSON.stringify({
+        version: 1, id: matchIdRef.current, pgn: chessRef.current.pgn(),
+        botId: selectedBot.id, playerColor, orientation, assistMode, timeControl, whiteClock, blackClock,
+      }));
+      setStorageError(false);
+    } catch { setStorageError(true); }
+  }, [phase, fen, selectedBot.id, playerColor, orientation, assistMode, timeControl, whiteClock, blackClock]);
+
+  const discardSession = () => {
+    botGenerationRef.current++;
+    if (botTimerRef.current) window.clearTimeout(botTimerRef.current);
+    if (modalTimerRef.current) window.clearTimeout(modalTimerRef.current);
+    setBotThinking(false);
+    try { localStorage.removeItem(GAME_SESSION_KEY); } catch { /* Storage can be disabled. */ }
+    setSavedSession(null);
+    setShowResultModal(false);
+    setPhase('SETUP');
+  };
+
+  const resumeSession = () => {
+    if (!savedSession) return;
+    const game = new Chess(); game.loadPgn(savedSession.pgn);
+    chessRef.current = game;
+    matchIdRef.current = savedSession.id;
+    const records = recordsFromGame(game);
+    setSelectedBot(BOTS.find(b => b.id === savedSession.botId)!);
+    setPlayerColor(savedSession.playerColor); setOrientation(savedSession.orientation);
+    setAssistMode(savedSession.assistMode); setTimeControl(savedSession.timeControl);
+    setWhiteClock(savedSession.whiteClock); setBlackClock(savedSession.blackClock);
+    setFen(game.fen()); setMoves(records); setViewPly(records.length);
+    setGameOutcome(null); setSavedSession(null); setPhase('PLAYING');
+    resumeBotRef.current = true;
+  };
 
   const boardTheme = BOARD_THEMES[preferences.boardTheme];
 
@@ -240,6 +285,9 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
         setBotDialogue(pickDialogue(selectedBot.dialogues.draw));
       }
 
+      try { localStorage.removeItem(GAME_SESSION_KEY); } catch { /* Storage may be disabled. */ }
+      setSavedSession(null);
+      botGenerationRef.current++;
       const archived: ArchivedGame = {
         id: matchIdRef.current || `game-${Date.now()}`,
         playedAt: new Date().toISOString(),
@@ -320,8 +368,18 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
       const [minMs, maxMs] = selectedBot.thinkTimeMs;
       const delay = minMs + Math.random() * (maxMs - minMs);
 
-      botTimerRef.current = window.setTimeout(() => {
-        const move = chooseBotMove(c.fen(), selectedBot);
+      botTimerRef.current = window.setTimeout(async () => {
+        const generation = botGenerationRef.current;
+        let move;
+        try { move = await requestBotMove(c.fen(), selectedBot); }
+        catch {
+          if (generation === botGenerationRef.current) {
+            setBotThinking(false);
+            setCoachBanner('Move calculation failed. Your game is saved; reload to resume and retry.');
+          }
+          return;
+        }
+        if (generation !== botGenerationRef.current) return;
         if (!move) {
           setBotThinking(false);
           return;
@@ -370,7 +428,9 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
           const premove = queuedPremoveRef.current;
           if (premove) {
             updateQueuedPremove(null);
+            const premoveGeneration = botGenerationRef.current;
             window.setTimeout(() => {
+              if (premoveGeneration !== botGenerationRef.current) return;
               const cur = chessRef.current;
               if (cur.isGameOver() || cur.turn() !== playerColor) return;
               try {
@@ -457,6 +517,7 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
         }
       }
 
+      botGenerationRef.current++;
       chessRef.current = fresh;
       matchIdRef.current = `game-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       lastSavedGameRef.current = null;
@@ -507,8 +568,18 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
 
       if (!fresh.isGameOver() && fresh.turn() !== resolvedColor) {
         setBotThinking(true);
-        botTimerRef.current = window.setTimeout(() => {
-          const move = chooseBotMove(fresh.fen(), botToPlay);
+        botTimerRef.current = window.setTimeout(async () => {
+          const generation = botGenerationRef.current;
+        let move;
+        try { move = await requestBotMove(fresh.fen(), botToPlay); }
+        catch {
+          if (generation === botGenerationRef.current) {
+            setBotThinking(false);
+            setCoachBanner('Move calculation failed. Your game is saved; reload to resume and retry.');
+          }
+          return;
+        }
+        if (generation !== botGenerationRef.current) return;
           if (move) {
             const executed = fresh.move(move);
             if (executed) {
@@ -534,6 +605,13 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
     },
     [selectedBot, sideChoice, sparringSeed, timeControl.initialSeconds]
   );
+
+  useEffect(() => {
+    if (resumeBotRef.current && phase === 'PLAYING') {
+      resumeBotRef.current = false;
+      if (chessRef.current.turn() !== playerColor) triggerBotTurn(moves);
+    }
+  }, [phase, playerColor, triggerBotTurn, moves]);
 
   useEffect(() => {
     if (phase !== 'PLAYING' || timeControl.initialSeconds === 0) return;
@@ -578,6 +656,7 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
 
   useEffect(() => {
     return () => {
+      botGenerationRef.current++;
       if (botTimerRef.current) window.clearTimeout(botTimerRef.current);
       if (modalTimerRef.current) window.clearTimeout(modalTimerRef.current);
     };
@@ -585,7 +664,7 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (phase === 'SETUP') return;
+      if (phase === 'SETUP' || e.defaultPrevented || (e.target instanceof Element && e.target.closest('dialog, input, textarea, [data-square]'))) return;
       if (e.key === 'ArrowLeft') {
         setViewPly((p) => Math.max(0, p - 1));
       } else if (e.key === 'ArrowRight') {
@@ -844,7 +923,7 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-7 items-start">
         {/* Left/Center Column: Board Stage */}
-        <div className="flex flex-col items-center w-full">
+        <div className={`${phase === 'SETUP' ? 'hidden lg:flex lg:order-1' : 'order-1'} flex flex-col items-center w-full`}>
           <div className="w-full max-w-[630px] flex flex-col gap-2">
             {isBotTop ? (
               <PlayerStrip
@@ -928,7 +1007,7 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
         </div>
 
         {/* Right Column: Setup OR Match Control Panel */}
-        <aside className="w-full bg-[#161E29] border border-slate-400/12 rounded-2xl p-5 shadow-[0_14px_38px_rgba(0,0,0,0.3)] overflow-hidden">
+        <aside className={`${phase === 'SETUP' ? 'order-1 lg:order-2' : 'order-2'} w-full bg-[#161E29] border border-slate-400/12 rounded-2xl p-5 shadow-[0_14px_38px_rgba(0,0,0,0.3)] overflow-hidden`}>
           <AnimatePresence mode="wait">
             {phase === 'SETUP' ? (
               <motion.div
@@ -1086,8 +1165,8 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
                 <motion.button
                   whileTap={{ scale: 0.985 }}
                   type="button"
-                  onClick={() => startMatch(selectedBot)}
-                  className="w-full py-3 px-4 rounded-xl bg-[#E5A93C] hover:bg-[#F0B952] text-[#0E131B] font-display font-bold text-sm tracking-tight transition-colors duration-150 cursor-pointer flex items-center justify-center gap-2 shadow-[0_6px_20px_rgba(229,169,60,0.22)]"
+                  onClick={() => savedSession ? setResumePromptOpen(true) : startMatch(selectedBot)}
+                  className="sticky bottom-2 z-10 w-full py-3 px-4 rounded-xl bg-[#E5A93C] hover:bg-[#F0B952] text-[#0E131B] font-display font-bold text-sm tracking-tight transition-colors duration-150 cursor-pointer flex items-center justify-center gap-2 shadow-[0_6px_20px_rgba(229,169,60,0.22)]"
                 >
                   <Swords className="w-4 h-4" />
                   <span>Play {selectedBot.name}</span>
@@ -1115,7 +1194,7 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setPhase('SETUP')}
+                    onClick={() => phase === 'PLAYING' ? setConfirmAction('new') : discardSession()}
                     className="px-2.5 py-1.5 rounded-lg bg-[#0F151E] hover:bg-[#222C3A] border border-slate-400/12 text-xs font-medium text-slate-200 transition-colors cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -1152,7 +1231,7 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          onClick={() => startMatch(selectedBot)}
+                          onClick={() => savedSession ? setResumePromptOpen(true) : startMatch(selectedBot)}
                           className="py-2 px-3 rounded-lg bg-[#E5A93C] hover:bg-[#F0B952] text-[#0E131B] font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap"
                         >
                           Rematch
@@ -1286,7 +1365,7 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
                   {phase === 'PLAYING' ? (
                     <button
                       type="button"
-                      onClick={handleResign}
+                      onClick={() => setConfirmAction('resign')}
                       className="flex flex-col items-center justify-center gap-1 py-2 px-2 rounded-lg bg-[#0F151E] hover:bg-red-950/55 text-slate-300 hover:text-red-300 text-[11px] font-medium transition-colors cursor-pointer"
                     >
                       <Flag className="w-4 h-4" />
@@ -1312,6 +1391,26 @@ export const PlayBotsView: React.FC<PlayBotsViewProps> = ({
           </AnimatePresence>
         </aside>
       </div>
+
+      {storageError && <p role="alert" className="text-sm text-amber-200">Your browser could not save this game. Keep this tab open to continue playing.</p>}
+      {savedSession && resumePromptOpen && phase === 'SETUP' && (
+        <Modal label="Resume your game" onClose={() => setResumePromptOpen(false)}>
+          <div className="p-6 space-y-4"><h2 className="text-xl font-bold">Your game is saved</h2>
+            <p className="text-sm text-slate-300">Continue against {BOTS.find(b => b.id === savedSession.botId)?.name}. Clocks were paused while you were away.</p>
+            <button autoFocus onClick={resumeSession} className="w-full min-h-11 rounded-xl bg-[#E5A93C] text-slate-950 font-bold">Resume game</button>
+            <button onClick={() => setConfirmAction('new')} className="w-full min-h-11 text-slate-300">Discard and start a new game</button>
+          </div>
+        </Modal>
+      )}
+      {confirmAction && (
+        <Modal label={confirmAction === 'new' ? 'Start a new game?' : 'Resign this game?'} onClose={() => setConfirmAction(null)}>
+          <div className="p-6 space-y-4"><h2 className="text-xl font-bold">{confirmAction === 'new' ? 'Start a new game?' : 'Resign this game?'}</h2>
+            <p className="text-sm text-slate-300">{confirmAction === 'new' ? 'Your unfinished game will be discarded.' : 'This will end the game and save it as a loss.'}</p>
+            <button autoFocus onClick={() => setConfirmAction(null)} className="w-full min-h-11 rounded-xl bg-[#E5A93C] text-slate-950 font-bold">Keep playing</button>
+            <button onClick={() => { if (confirmAction === 'new') discardSession(); else handleResign(); setConfirmAction(null); }} className="w-full min-h-11 text-red-300">{confirmAction === 'new' ? 'Discard game' : 'Resign game'}</button>
+          </div>
+        </Modal>
+      )}
 
       {/* Centered Celebration / Match Result Overlay */}
       <ResultOverlayModal

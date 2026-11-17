@@ -76,7 +76,7 @@ export const CoachBoardStage: React.FC<CoachBoardStageProps> = ({
   const whiteLeading = clampedPct >= 50;
 
   return (
-    <div className="max-w-[580px] mx-auto px-3 sm:px-4 py-3 sm:py-5 flex flex-col gap-3">
+    <div className="coach-stage max-w-[580px] mx-auto px-3 sm:px-4 py-3 sm:py-5 flex flex-col gap-3">
       {/* 1. Minimal Top Bar */}
       <header className="flex items-center justify-between gap-2 min-h-[40px]">
         <div className="flex items-center gap-1 min-w-[40px]">
@@ -103,12 +103,12 @@ export const CoachBoardStage: React.FC<CoachBoardStageProps> = ({
       </header>
 
       {/* Optional compact mode switcher / context strip */}
-      {subHeader}
+      <div className="coach-stage-sub min-w-0">{subHeader}</div>
 
       {/* 2. Horizontal Evaluation or Progress Bar */}
       {barMode === 'eval' ? (
         <div
-          className="relative w-full h-5 rounded-md overflow-hidden bg-[#262D38] border border-slate-400/12 flex items-center select-none"
+          className="coach-stage-bar relative w-full h-5 rounded-md overflow-hidden bg-[#262D38] border border-slate-400/12 flex items-center select-none"
           aria-label={`Position evaluation ${barLeftLabel ?? ''}`}
         >
           <div
@@ -126,7 +126,7 @@ export const CoachBoardStage: React.FC<CoachBoardStageProps> = ({
           )}
         </div>
       ) : (
-        <div className="relative w-full h-5 rounded-md overflow-hidden bg-[#262D38] border border-slate-400/12 flex items-center justify-between px-2.5 select-none">
+        <div className="coach-stage-bar relative w-full h-5 rounded-md overflow-hidden bg-[#262D38] border border-slate-400/12 flex items-center justify-between px-2.5 select-none">
           <div
             className="absolute inset-y-0 left-0 opacity-85 transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{ width: `${clampedPct}%`, backgroundColor: barFillColor }}
@@ -152,14 +152,14 @@ export const CoachBoardStage: React.FC<CoachBoardStageProps> = ({
       />
 
       {/* 4. Clean Chessboard */}
-      <div className="w-full">{board}</div>
+      <div className="coach-stage-board w-full min-w-0">{board}</div>
 
       {/* 5. Minimal Horizontal Ribbon */}
-      {ribbon}
+      <div className="coach-stage-ribbon min-w-0">{ribbon}</div>
 
       {/* 6. Minimal Bottom Action Dock */}
       <div
-        className="grid items-center gap-2 pt-0.5"
+        className="coach-stage-actions grid items-center gap-2 pt-0.5"
         style={{
           gridTemplateColumns: bottomActions
             .map((a) => (a.primary ? '1.45fr' : '1fr'))
@@ -198,7 +198,7 @@ export const CoachBoardStage: React.FC<CoachBoardStageProps> = ({
       </div>
 
       {footerHint && (
-        <p className="text-[11px] text-center text-slate-500">{footerHint}</p>
+        <p className="coach-stage-footer text-[11px] text-center text-slate-500">{footerHint}</p>
       )}
     </div>
   );

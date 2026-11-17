@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import coachAvatar from '../assets/images/bot_avatar_viktor_1794860679687.jpg';
+import coachAvatar from '../assets/images/bot_avatar_viktor_1794860679687.webp';
 
 interface CoachFeedbackProps {
   badgeColor: string;

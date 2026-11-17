@@ -1,31 +1,10 @@
+import { readPendingProgress, savePendingProgress, clearPendingProgress, readPendingGames, writePendingGames } from '../utils/pendingProgress';
+import { mergeGuestProgress } from '../utils/mergeProgress';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Chess } from 'chess.js';
-import {
-  User,
-  onAuthStateChanged,
-  signInWithPopup,
-  signOut,
-} from 'firebase/auth';
-import {
-  Timestamp,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-} from 'firebase/firestore';
-import {
-  OperationType,
-  auth,
-  db,
-  googleProvider,
-  handleFirestoreError,
-} from '../firebase';
+import type { User } from 'firebase/auth';
+import type { Timestamp } from 'firebase/firestore';
+const loadCloud = () => import('../cloud');
 import { DEFAULT_PREFERENCES } from '../data/themes';
 import {
   ArchivedGame,
@@ -40,7 +19,7 @@ import {
   UserAccountProfile,
   UserPreferences,
 } from '../types/chess';
-import { parseWeakPlies, serializeWeakPlies } from '../utils/repertoire';
+import { parseWeakPlies, serializeWeakPlies } from '../utils/weakPlies';
 
 const LOCAL_PROGRESS_KEY = 'checkmate_line_progress_v1';
 const LOCAL_CUSTOM_LINES_KEY = 'checkmate_custom_lines_v1';
@@ -53,6 +32,7 @@ interface AuthContextValue {
   authError: string | null;
   profile: UserAccountProfile;
   effectiveTier: SubscriptionTier;
+  demoEnabled: boolean;
   lineProgress: Record<string, LineProgress>;
   customLines: CustomOpeningLine[];
   cloudGames: ArchivedGame[] | null;
@@ -147,8 +127,8 @@ function loadLocalTier(): {
 }
 
 function timestampToIso(value: unknown): string {
-  if (value instanceof Timestamp) {
-    return value.toDate().toISOString();
+  if (value && typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function') {
+    return (value as Timestamp).toDate().toISOString();
   }
   if (typeof value === 'string') return value;
   return new Date().toISOString();
@@ -252,6 +232,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  const [demoEnabled, setDemoEnabled] = useState(() => { try { return localStorage.getItem('checkmate_demo_v1') === 'true'; } catch { return false; } });
   const [localTier, setLocalTier] = useState(loadLocalTier);
   const [profile, setProfile] = useState<UserAccountProfile>(() => ({
     ...DEFAULT_GUEST_PROFILE,
@@ -296,6 +277,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let unsubCustom: (() => void) | undefined;
     let unsubGames: (() => void) | undefined;
     let cancelled = false;
+    let authGeneration = 0;
 
     const cleanupSubs = () => {
       unsubProfile?.();
@@ -304,7 +286,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubGames?.();
     };
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (nextUser) => {
+    let unsubscribeAuth = () => {};
+    void loadCloud().then(({onAuthStateChanged, auth, db, doc, getDoc, setDoc, serverTimestamp, onSnapshot, query, collection, where, migrateGuestWork}) => {
+      if (cancelled) return;
+      unsubscribeAuth = onAuthStateChanged(auth, async (nextUser) => {
+      const generation = ++authGeneration;
       cleanupSubs();
       setUser(nextUser);
 
@@ -357,11 +343,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setAuthError('Unable to initialize user profile in cloud.');
           setAuthReady(true);
         }
-        handleFirestoreError(err, OperationType.WRITE, `users/${uid}`);
+        console.error('User profile initialization failed.');
         return;
       }
 
-      if (cancelled) return;
+      if (cancelled || generation !== authGeneration) return;
+      try {
+        let games: ArchivedGame[] = [];
+        try { const stored = JSON.parse(localStorage.getItem('checkmate_archive_v1') || '[]'); if (Array.isArray(stored)) games = stored; } catch { /* No valid local games. */ }
+        const pending = readPendingProgress(uid);
+        const progress = {...loadLocalProgress()};
+        for (const [id,item] of Object.entries(pending)) progress[id] = mergeGuestProgress(item,progress[id]);
+        await migrateGuestWork(db, uid, progress, loadLocalCustomLines(), [...games,...readPendingGames(uid)]);
+        writePendingGames(uid,[]);
+        for (const id of Object.keys(pending)) clearPendingProgress(uid,id);
+      } catch {
+        setAuthError('Some guest work could not be imported. It remains saved in this browser. Sign out and sign in again to retry.');
+      }
+      if (cancelled || generation !== authGeneration) return;
 
       unsubProfile = onSnapshot(
         userRef,
@@ -403,6 +402,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
         (err) => {
           console.error('Profile listener error:', err);
+          setAuthError('Your account could not sync. Your local work is preserved. Check your connection and sign in again.');
           setAuthReady(true);
         }
       );
@@ -430,10 +430,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               weakPlies: parseWeakPlies(d.weakPlies),
             };
           });
+          for (const [id,item] of Object.entries(readPendingProgress(uid))) nextMap[id] = mergeGuestProgress(item,nextMap[id]);
           setLineProgress(nextMap);
         },
         (err) => {
           console.error('Line progress listener error:', err);
+          setAuthError('Cloud sync is unavailable. Your guest work is still saved in this browser; sign in again to retry.');
         }
       );
 
@@ -462,6 +464,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
         (err) => {
           console.error('Custom lines listener error:', err);
+          setAuthError('Cloud sync is unavailable. Your guest work is still saved in this browser; sign in again to retry.');
         }
       );
 
@@ -497,12 +500,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
           });
           list.sort((a, b) => b.playedAt.localeCompare(a.playedAt));
-          setCloudGames(list);
+          const pendingGames = readPendingGames(uid);
+          setCloudGames([...pendingGames,...list.filter(g=>!pendingGames.some(p=>p.id===g.id))]);
         },
         (err) => {
           console.error('Games listener error:', err);
+          setAuthError('Cloud sync is unavailable. Your guest work is still saved in this browser; sign in again to retry.');
         }
       );
+    });
+
+    }).catch(() => {
+      if (!cancelled) {
+        setAuthError('Account services could not load. You can keep learning as a guest and reload to retry sign-in.');
+        setAuthReady(true);
+      }
     });
 
     return () => {
@@ -516,6 +528,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthError(null);
     setAuthLoading(true);
     try {
+      const { signInWithPopup, auth, googleProvider } = await loadCloud();
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Sign-in was canceled.';
@@ -529,44 +542,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOutUser = useCallback(async () => {
     setAuthError(null);
-    await signOut(auth);
+    try {
+      const {signOut,auth} = await loadCloud();
+      await signOut(auth);
+    } catch { setAuthError('Could not sign out. Please try again.'); }
   }, []);
 
-  const updateSubscription = useCallback(
-    async (
-      tier: SubscriptionTier,
-      billingCycle: BillingCycle,
-      status: SubscriptionStatus = 'active'
-    ) => {
-      if (!user) {
-        const next = {
-          subscriptionTier: tier,
-          billingCycle,
-          subscriptionStatus: status,
-        };
-        setLocalTier(next);
-        setProfile((prev) => ({ ...prev, ...next }));
-        return;
-      }
-
-      const path = `users/${user.uid}`;
-      try {
-        await updateDoc(doc(db, 'users', user.uid), {
-          subscriptionTier: tier,
-          billingCycle,
-          subscriptionStatus: status,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
-      }
-    },
-    [user]
-  );
+  // Demo access is a browser preference, never a subscription/entitlement write.
+  const updateSubscription = useCallback(async (tier: SubscriptionTier, _billingCycle: BillingCycle, status: SubscriptionStatus = 'active') => {
+    const enabled = tier === 'pro' && status === 'active';
+    setDemoEnabled(enabled);
+    try { localStorage.setItem('checkmate_demo_v1', String(enabled)); } catch { setAuthError('Demo access will reset when this tab closes because browser storage is unavailable.'); }
+  }, []);
 
   const syncPreferences = useCallback(
     async (prefs: UserPreferences) => {
       if (!user) return;
+      const { db, doc, updateDoc, serverTimestamp } = await loadCloud();
       const path = `users/${user.uid}`;
       try {
         await updateDoc(doc(db, 'users', user.uid), {
@@ -580,7 +572,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
+        setAuthError('Your settings could not sync. Check your connection and try again.');
       }
     },
     [user]
@@ -603,11 +595,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         missedPlies
       );
 
-      if (!user) {
-        setLineProgress((prev) => ({ ...prev, [lineId]: next }));
-        return next;
-      }
+      setLineProgress((prev) => ({ ...prev, [lineId]: next }));
+      if (!user) return next;
+      try { savePendingProgress(user.uid,next); } catch { setAuthError('Browser storage is full. Keep this tab open until cloud sync completes.'); }
 
+      const { db, doc, getDoc, updateDoc, setDoc, serverTimestamp } = await loadCloud();
       const serializedWeak = serializeWeakPlies(next.weakPlies ?? {});
       const path = `users/${user.uid}/lineProgress/${lineId}`;
       const ref = doc(db, 'users', user.uid, 'lineProgress', lineId);
@@ -637,9 +629,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             lastPracticedAt: serverTimestamp(),
           });
         }
+        try { clearPendingProgress(user.uid,lineId); } catch { /* Retry remains idempotent. */ }
         return next;
-      } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, path);
+      } catch {
+        setAuthError('This review is saved locally but could not sync. Sign out and sign in again to retry.');
+        return next;
       }
     },
     [user, lineProgress]
@@ -672,6 +666,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return created;
       }
 
+      const { db, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType } = await loadCloud();
       const path = `users/${user.uid}/customLines/${cleanId}`;
       try {
         await setDoc(doc(db, 'users', user.uid, 'customLines', cleanId), {
@@ -684,7 +679,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         return created;
       } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, path);
+        return handleFirestoreError(err, OperationType.CREATE, path);
       }
     },
     [user]
@@ -696,11 +691,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCustomLines((prev) => prev.filter((l) => l.id !== lineId));
         return;
       }
+      const { db, doc, deleteDoc } = await loadCloud();
       const path = `users/${user.uid}/customLines/${lineId}`;
       try {
         await deleteDoc(doc(db, 'users', user.uid, 'customLines', lineId));
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, path);
+        setAuthError('The item could not be deleted from your account. Please try again.');
       }
     },
     [user]
@@ -710,6 +706,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async (game: ArchivedGame) => {
       if (!user) return;
       const safeId = game.id.replace(/[^a-zA-Z0-9_\-]/g, '-').slice(0, 64);
+      try { writePendingGames(user.uid,[game,...readPendingGames(user.uid).filter(g=>g.id!==game.id)]); } catch { setAuthError('Browser storage is full. Keep this tab open until your game syncs.'); }
+      const { db, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType } = await loadCloud();
       const path = `users/${user.uid}/games/${safeId}`;
       try {
         await setDoc(doc(db, 'users', user.uid, 'games', safeId), {
@@ -727,8 +725,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           timeControlLabel: game.timeControlLabel.slice(0, 40) || 'Untimed',
           playedAt: serverTimestamp(),
         });
+        try { writePendingGames(user.uid,readPendingGames(user.uid).filter(g=>g.id!==game.id)); } catch { /* Import is idempotent. */ }
       } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, path);
+        setAuthError('Your game is backed up in this browser but could not sync. Sign out and sign in again to retry.');
+        setCloudGames(prev=>[game,...(prev??[]).filter(g=>g.id!==game.id)]);
       }
     },
     [user]
@@ -737,18 +737,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteArchivedGameCloud = useCallback(
     async (gameId: string) => {
       if (!user) return;
+      const { db, doc, deleteDoc } = await loadCloud();
       const path = `users/${user.uid}/games/${gameId}`;
       try {
         await deleteDoc(doc(db, 'users', user.uid, 'games', gameId));
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, path);
+        setAuthError('The item could not be deleted from your account. Please try again.');
       }
     },
     [user]
   );
 
   const effectiveTier: SubscriptionTier =
-    profile.subscriptionStatus === 'canceled' ? 'free' : profile.subscriptionTier;
+    demoEnabled ? 'pro' : user && profile.subscriptionStatus === 'active' ? profile.subscriptionTier : 'free';
 
   return (
     <AuthContext.Provider
@@ -759,6 +760,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authError,
         profile,
         effectiveTier,
+        demoEnabled,
         lineProgress,
         customLines,
         cloudGames,

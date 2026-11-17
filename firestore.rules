@@ -240,6 +240,9 @@ service cloud.firestore {
       allow create: if isValidId(userId)
         && isOwner(userId)
         && isValidUserProfile(incoming(), userId)
+        && incoming().subscriptionTier == 'free'
+        && incoming().subscriptionStatus == 'active'
+        && incoming().billingCycle == 'annual'
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
       allow update: if isValidId(userId)
@@ -250,12 +253,6 @@ service cloud.firestore {
         && incoming().updatedAt == request.time
         && (
           incoming().diff(existing()).affectedKeys().hasOnly([
-            'subscriptionTier',
-            'billingCycle',
-            'subscriptionStatus',
-            'updatedAt'
-          ])
-          || incoming().diff(existing()).affectedKeys().hasOnly([
             'boardTheme',
             'pieceSet',
             'coordinates',
@@ -279,7 +276,7 @@ service cloud.firestore {
           && isValidId(lineId)
           && isOwner(userId)
           && isValidLineProgress(incoming(), userId, lineId)
-          && incoming().lastPracticedAt == request.time
+          && incoming().lastPracticedAt <= request.time
           && exists(/databases/$(database)/documents/users/$(userId));
         allow update: if isValidId(userId)
           && isValidId(lineId)
@@ -288,7 +285,7 @@ service cloud.firestore {
           && incoming().userId == existing().userId
           && incoming().courseId == existing().courseId
           && incoming().lineId == existing().lineId
-          && incoming().lastPracticedAt == request.time
+          && incoming().lastPracticedAt <= request.time
           && incoming().diff(existing()).affectedKeys().hasOnly([
             'attempts',
             'mistakes',
@@ -308,7 +305,7 @@ service cloud.firestore {
           && isValidId(lineId)
           && isOwner(userId)
           && isValidCustomLine(incoming(), userId)
-          && incoming().createdAt == request.time
+          && incoming().createdAt <= request.time
           && exists(/databases/$(database)/documents/users/$(userId));
         allow update: if isValidId(userId)
           && isValidId(lineId)
@@ -332,7 +329,7 @@ service cloud.firestore {
           && isValidId(gameId)
           && isOwner(userId)
           && isValidArchivedGame(incoming(), userId)
-          && incoming().playedAt == request.time
+          && incoming().playedAt <= request.time
           && exists(/databases/$(database)/documents/users/$(userId));
         allow update: if false;
         allow delete: if isValidId(userId) && isValidId(gameId) && isOwner(userId);

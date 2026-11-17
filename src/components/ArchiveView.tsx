@@ -1,3 +1,4 @@
+import { Modal } from './ui/Modal';
 import { CoachFeedback } from './CoachFeedback';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess } from 'chess.js';
@@ -181,7 +182,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
   useEffect(() => {
     if (!reviewGame) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.defaultPrevented || (e.target instanceof Element && e.target.closest('dialog, input, textarea'))) return;
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
         setShowBestLinePreview(false);
@@ -560,13 +561,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
         {/* Summary & Opening Book Report Modal Drawer */}
         <AnimatePresence>
           {showReportDrawer && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#0E131B]/75 backdrop-blur-xs"
-              onClick={() => setShowReportDrawer(false)}
-            >
+            <Modal label="Game review summary" onClose={() => setShowReportDrawer(false)}>
               <motion.div
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -783,7 +778,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                   </button>
                 </div>
               </motion.div>
-            </motion.div>
+            </Modal>
           )}
         </AnimatePresence>
       </div>

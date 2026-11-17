@@ -240,7 +240,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
   const [blitzRemainingMs, setBlitzRemainingMs] = useState(5000);
   const [branchMode, setBranchMode] = useState(false);
 
-  const allPerfectedQueue = useMemo<ReviewQueueItem[]>(() => {
+  const allLearnedQueue = useMemo<ReviewQueueItem[]>(() => {
     const now = Date.now();
     const items: ReviewQueueItem[] = [];
 
@@ -296,13 +296,13 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
   }, [effectiveTier, lineProgress, customLines]);
 
   const reviewQueue = useMemo<ReviewQueueItem[]>(() => {
-    return allPerfectedQueue.filter((item) => {
+    return allLearnedQueue.filter((item) => {
       if (mixColorFilter !== 'all' && item.playerColor !== mixColorFilter) return false;
       if (mixDueOnly && !item.isDue) return false;
       if (mixCourseFilter !== 'all' && item.variation.courseId !== mixCourseFilter) return false;
       return true;
     });
-  }, [allPerfectedQueue, mixColorFilter, mixDueOnly, mixCourseFilter]);
+  }, [allLearnedQueue, mixColorFilter, mixDueOnly, mixCourseFilter]);
 
   const [reviewLineId, setReviewLineId] = useState<string>(() => {
     if (reviewQueue.length === 0) return '';
@@ -647,7 +647,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
   );
 
   // ---------------- EMPTY / NO-MATCH STATES FOR PRACTICE LEARNED ----------------
-  if (mode === 'review' && (allPerfectedQueue.length === 0 || reviewQueue.length === 0)) {
+  if (mode === 'review' && (allLearnedQueue.length === 0 || reviewQueue.length === 0)) {
     return (
       <div className="max-w-[580px] mx-auto px-3 sm:px-4 py-3 sm:py-5 space-y-4">
         <header className="flex items-center justify-center min-h-[40px]">
@@ -657,14 +657,14 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
         </header>
         {modeTabs}
 
-        {allPerfectedQueue.length === 0 ? (
+        {allLearnedQueue.length === 0 ? (
           <div className="bg-[#161E29] border border-slate-400/12 rounded-2xl p-8 text-center space-y-3">
             <Shuffle className="w-8 h-8 text-[#81B64C] mx-auto" />
             <h2 className="font-display text-base font-bold text-slate-100">
-              No Perfected Lines Ready Yet
+              No learned lines yet
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Only lines passed flawlessly (0 mistakes) appear here. Follow the guide arrows in Courses and pass a line cleanly first.
+              Learn a line in Courses, then complete its memory test without mistakes. It will appear here for review.
             </p>
             {onGoToCourses && (
               <button
@@ -679,7 +679,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
         ) : (
           <div className="bg-[#161E29] border border-slate-400/12 rounded-2xl p-8 text-center space-y-3">
             <h2 className="font-display text-base font-bold text-slate-100">
-              No perfected lines match the active filter
+              No learned lines match the active filter
             </h2>
             <button
               type="button"
@@ -690,7 +690,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
               }}
               className="px-4 py-2 rounded-xl bg-[#222C3A] hover:bg-[#2D3A4C] text-xs font-semibold text-white cursor-pointer"
             >
-              Reset Filters ({allPerfectedQueue.length} Total)
+              Reset Filters ({allLearnedQueue.length} Total)
             </button>
           </div>
         )}
@@ -1298,7 +1298,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
                     onChange={(e) => setMixCourseFilter(e.target.value)}
                     className="w-full bg-[#0F151E] border border-slate-400/12 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-[#E5A93C]"
                   >
-                    <option value="all">All Courses ({allPerfectedQueue.length} perfected)</option>
+                    <option value="all">All Courses ({allLearnedQueue.length} learned)</option>
                     {OPENING_COURSES.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.title.split(':')[0]}

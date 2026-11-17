@@ -161,6 +161,7 @@ export interface OpeningStep {
 }
 
 export interface OpeningVariation {
+  source?: string;
   id: string;
   courseId: string;
   name: string;

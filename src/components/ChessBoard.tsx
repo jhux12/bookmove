@@ -1,3 +1,4 @@
+import { Modal } from './ui/Modal';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
 import { AnimatePresence, motion } from 'motion/react';
@@ -78,6 +79,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   onMove,
 }) => {
   const boardRef = useRef<HTMLDivElement>(null);
+  const [focusedSquare, setFocusedSquare] = useState('e2');
+  const [keyboardMessage, setKeyboardMessage] = useState('');
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<{
     from: string;
@@ -476,9 +479,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       pointerDownInfo.current = null;
     };
 
+    const cancelPointer = () => { pointerDownInfo.current = null; dragFromRef.current = null; rightDragStartRef.current = null; setDragState(null); };
+    window.addEventListener('pointercancel', cancelPointer);
     window.addEventListener('pointermove', handleGlobalMove);
     window.addEventListener('pointerup', handleGlobalUp);
     return () => {
+      window.removeEventListener('pointercancel', cancelPointer);
       window.removeEventListener('pointermove', handleGlobalMove);
       window.removeEventListener('pointerup', handleGlobalUp);
     };
@@ -497,6 +503,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   return (
     <div className="flex items-stretch gap-3 w-full select-none">
+      <span className="sr-only" aria-live="polite">{keyboardMessage}</span>
       {/* Evaluation Bar */}
       {showEvalBar && (
         <div
@@ -556,6 +563,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         {/* 8x8 Square Grid */}
         <div
           ref={boardRef}
+          role="group"
+          aria-label={interactive ? 'Chessboard. Use arrow keys to focus a square, Enter or Space to select and move, and Escape to clear selection.' : 'Chessboard position'}
           className="relative w-full h-full grid grid-cols-8 grid-rows-8 rounded-lg overflow-hidden touch-none"
         >
           {orderedRanks.map((rank, visualRow) =>
@@ -587,6 +596,33 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               return (
                 <div
                   key={sq}
+                  role={interactive ? 'button' : undefined}
+                  tabIndex={interactive && focusedSquare === sq ? 0 : -1}
+                  aria-label={`${sq}${piece ? `, ${piece.color === 'w' ? 'White' : 'Black'} ${{p:'pawn',n:'knight',b:'bishop',r:'rook',q:'queen',k:'king'}[piece.type]}` : ', empty'}${isSelected ? ', selected' : ''}${isLegal ? ', legal destination' : ''}${isCheck ? ', in check' : ''}`}
+                  aria-pressed={interactive ? isSelected : undefined}
+                  onFocus={() => setFocusedSquare(sq)}
+                  onKeyDown={(e) => {
+                    if (!interactive) return;
+                    const directions: Record<string, [number, number]> = {ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+                    if (directions[e.key]) {
+                      e.preventDefault();
+                      const [dx,dy] = directions[e.key];
+                      const target = `${orderedFiles[Math.max(0, Math.min(7, visualCol + dx))]}${orderedRanks[Math.max(0, Math.min(7, visualRow + dy))]}`;
+                      setFocusedSquare(target);
+                      boardRef.current?.querySelector<HTMLElement>(`[data-square="${target}"]`)?.focus({preventScroll:true});
+                    } else if (e.key === 'Escape') {
+                      setSelectedSquare(null); setKeyboardMessage('Selection cleared.');
+                    } else if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      if (selectedSquare && legalTargets.has(sq)) {
+                        const from = selectedSquare;
+                        if (tryExecuteMove(from, sq, false)) setKeyboardMessage(`Moved from ${from} to ${sq}.`);
+                      } else if (piece && isColorInteractive(piece.color)) {
+                        setSelectedSquare(isSelected ? null : sq);
+                        setKeyboardMessage(isSelected ? 'Selection cleared.' : `${sq} selected. Use arrow keys to choose a destination and Enter to move.`);
+                      } else setKeyboardMessage('Choose one of your pieces or a legal destination.');
+                    }
+                  }}
                   onPointerDown={(e) =>
                     handlePointerDown(
                       e,
@@ -772,14 +808,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           {/* Pawn Promotion Picker Overlay */}
           <AnimatePresence>
             {pendingPromotion && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.14 }}
-                className="absolute inset-0 z-30 bg-[#0E131B]/65 backdrop-blur-[2px] flex items-center justify-center"
-                onClick={() => setPendingPromotion(null)}
-              >
+              <Modal label="Choose promotion piece" onClose={() => setPendingPromotion(null)} className="max-w-xs">
                 <motion.div
                   initial={{ scale: 0.92, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
@@ -788,7 +817,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   className="bg-[#161E29] border border-slate-400/20 rounded-xl p-3 shadow-2xl flex items-center gap-2"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {(['q', 'r', 'b', 'n'] as PieceType[]).map((promo) => (
+                  {(['q', 'r', 'b', 'n'] as const).map((promo) => (
                     <button
                       key={promo}
                       type="button"
@@ -798,7 +827,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                         setSelectedSquare(null);
                       }}
                       className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-[#222C3A] hover:bg-[#E5A93C]/25 border border-slate-400/15 hover:border-[#E5A93C] p-1.5 transition-colors cursor-pointer"
-                      aria-label={`Promote to ${promo}`}
+                      aria-label={`Promote to ${{q:'queen',r:'rook',b:'bishop',n:'knight'}[promo]}`}
                     >
                       <ChessPieceSvg
                         type={promo}
@@ -808,7 +837,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                     </button>
                   ))}
                 </motion.div>
-              </motion.div>
+              </Modal>
             )}
           </AnimatePresence>
         </div>

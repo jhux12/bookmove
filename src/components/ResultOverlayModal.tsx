@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import { Modal } from './ui/Modal';
+import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle2, Crown, Handshake, ShieldAlert, X } from 'lucide-react';
 import { BotProfile } from '../types/chess';
@@ -46,14 +47,6 @@ export const ResultOverlayModal: React.FC<ResultOverlayProps> = ({
 }) => {
   const celebrate = variant === 'win' || variant === 'puzzle';
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
 
   const accentText =
     variant === 'win' || variant === 'puzzle'
@@ -72,23 +65,13 @@ export const ResultOverlayModal: React.FC<ResultOverlayProps> = ({
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E131B]/68 backdrop-blur-[3px]"
-          onClick={onClose}
-          role="dialog"
-          aria-modal="true"
-          aria-label={title}
-        >
+        <Modal label={title} onClose={onClose} className="max-w-[380px]">
           <motion.div
             initial={{ opacity: 0, scale: 0.92, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 8 }}
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-            className="relative w-full max-w-[380px] rounded-2xl bg-[#161E29] border border-slate-400/18 p-6 shadow-[0_24px_64px_rgba(0,0,0,0.6)] text-center overflow-visible"
+            className="relative w-full max-w-[380px] rounded-2xl bg-[#161E29] border border-slate-400/18 p-5 sm:p-6 text-center overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close Button */}
@@ -181,11 +164,11 @@ export const ResultOverlayModal: React.FC<ResultOverlayProps> = ({
 
             {/* Actions */}
             <div className="mt-5 space-y-2">
-              <div className={`grid gap-2 ${secondaryLabel && onSecondary ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              <div className={`grid gap-2 ${secondaryLabel && onSecondary ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
                 <button
                   type="button"
                   onClick={onPrimary}
-                  className="py-2.5 px-4 rounded-xl bg-[#E5A93C] hover:bg-[#F0B952] text-[#0E131B] font-display font-bold text-xs tracking-tight transition-colors cursor-pointer whitespace-nowrap"
+                  className="py-2.5 px-4 rounded-xl bg-[#E5A93C] hover:bg-[#F0B952] text-[#0E131B] font-display font-bold text-xs tracking-tight transition-colors cursor-pointer whitespace-normal min-h-11"
                 >
                   {primaryLabel}
                 </button>
@@ -193,7 +176,7 @@ export const ResultOverlayModal: React.FC<ResultOverlayProps> = ({
                   <button
                     type="button"
                     onClick={onSecondary}
-                    className="py-2.5 px-4 rounded-xl bg-[#222C3A] hover:bg-[#2D3A4C] text-slate-100 font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap"
+                    className="py-2.5 px-4 rounded-xl bg-[#222C3A] hover:bg-[#2D3A4C] text-slate-100 font-semibold text-xs transition-colors cursor-pointer whitespace-normal min-h-11"
                   >
                     {secondaryLabel}
                   </button>
@@ -209,7 +192,7 @@ export const ResultOverlayModal: React.FC<ResultOverlayProps> = ({
               </button>
             </div>
           </motion.div>
-        </motion.div>
+        </Modal>
       )}
     </AnimatePresence>
   );

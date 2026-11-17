@@ -1,9 +1,10 @@
+import { expandCourse } from './openingCurriculum';
 import { OpeningCourse, SubscriptionTier } from '../types/chess';
 
 export const FREE_PREVIEW_COURSE_ID = 'course-italian';
 export const FREE_PREVIEW_VARIATION_ID = 'italian-giuoco-main';
 
-export const OPENING_COURSES: OpeningCourse[] = [
+const BASE_COURSES: OpeningCourse[] = [
   {
     id: 'course-italian',
     title: 'Italian Game: Giuoco Piano & Attacks',
@@ -98,7 +99,7 @@ export const OPENING_COURSES: OpeningCourse[] = [
           { san: 'Nc6', note: 'Defend e5.' },
           { san: 'Bc4', note: 'Eye f7.' },
           { san: 'Nf6', note: 'Two Knights Defense—Black ignores f7 to counterattack e4.' },
-          { san: 'Ng5', note: 'Strike at f7 with two pieces! Black has only one clean way to block the diagonal.', keyIdea: 'f7 Double Attack' },
+          { san: 'Ng5', note: 'Strike at f7 with two pieces. Black commonly blocks the diagonal with ...d5, but there are sharp alternatives.', keyIdea: 'f7 Double Attack' },
           { san: 'd5', note: 'Black blocks the c4 bishop’s diagonal.' },
           { san: 'exd5', note: 'Eliminate the blocker.' },
           { san: 'Na5', note: 'Black avoids Nxd5 (which invites Nxf7!) and chases the c4 bishop.' },
@@ -113,7 +114,7 @@ export const OPENING_COURSES: OpeningCourse[] = [
         name: 'Beating the Traxler Counterattack',
         eco: 'C57',
         difficulty: 'Master',
-        summary: 'Take safely with 5.Bxf7+ instead of Nxf7 to stay a clean pawn up with zero counterplay.',
+        summary: 'Take safely with 5.Bxf7+ instead of Nxf7 to stay a clean pawn up while avoiding the sharpest knight-sacrifice lines.',
         steps: [
           { san: 'e4', note: 'Open the center.' },
           { san: 'e5', note: 'Symmetric reply.' },
@@ -123,7 +124,7 @@ export const OPENING_COURSES: OpeningCourse[] = [
           { san: 'Nf6', note: 'Two Knights Defense.' },
           { san: 'Ng5', note: 'Attack f7 directly.' },
           { san: 'Bc5', note: 'The Traxler! Black ignores f7 to bait Nxf7 and sac on f2.' },
-          { san: 'Bxf7+', note: 'Refute the trick cleanly—force the king to move without opening f2 chaos!', keyIdea: 'Tactical Refutation' },
+          { san: 'Bxf7+', note: 'Give check with the bishop to avoid the sharpest Nxf7 complications.', keyIdea: 'Tactical Refutation' },
           { san: 'Ke7', note: 'Black steps up to e7 to protect f7.' },
           { san: 'Bb3', note: 'Tuck the bishop back safely on the a2–g8 diagonal.', keyIdea: 'Safe Retreat' },
           { san: 'Rf8', note: 'Black tries to stir up pressure down the f-file.' },
@@ -1166,13 +1167,15 @@ export const OPENING_COURSES: OpeningCourse[] = [
   },
 ];
 
+export const OPENING_COURSES: OpeningCourse[] = BASE_COURSES.map(expandCourse);
+
 export function getCourseById(courseId: string): OpeningCourse | undefined {
   return OPENING_COURSES.find((c) => c.id === courseId);
 }
 
 /**
  * Only one single preview line (Italian Game: Giuoco Piano Central Strike) is unlocked for free users.
- * Subscribers ('pro') unlock all courses and all 48 lines.
+ * Subscribers ('pro') unlock all courses and all available lines.
  */
 export function isVariationUnlocked(
   _courseId: string,

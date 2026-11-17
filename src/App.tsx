@@ -3,13 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
-import { CoursesView } from './components/CoursesView';
-import { CustomizeView } from './components/CustomizeView';
-import { MembershipView } from './components/MembershipView';
-import { PlayBotsView } from './components/PlayBotsView';
-import { PracticeView } from './components/PracticeView';
+const CoursesView = lazy(() => import('./components/CoursesView').then((m) => ({ default: m.CoursesView })));
+const CustomizeView = lazy(() => import('./components/CustomizeView').then((m) => ({ default: m.CustomizeView })));
+const MembershipView = lazy(() => import('./components/MembershipView').then((m) => ({ default: m.MembershipView })));
+const PlayBotsView = lazy(() => import('./components/PlayBotsView').then((m) => ({ default: m.PlayBotsView })));
+const PracticeView = lazy(() => import('./components/PracticeView').then((m) => ({ default: m.PracticeView })));
 import { useAuth } from './context/AuthContext';
 import { DEFAULT_PREFERENCES } from './data/themes';
 import {
@@ -48,7 +48,12 @@ function loadArchive(): ArchivedGame[] {
 export default function App() {
   const {
     user,
+    authLoading,
+    authReady,
+    authError,
+    clearAuthError,
     effectiveTier,
+    demoEnabled,
     cloudGames,
     remotePreferences,
     signInWithGoogle,
@@ -57,7 +62,12 @@ export default function App() {
     deleteArchivedGameCloud,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('courses');
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => { try { const tab = sessionStorage.getItem('checkmate_tab'); return ['courses','practice','play','customize','membership'].includes(tab ?? '') ? tab as ActiveTab : 'courses'; } catch { return 'courses'; } });
+  const [playMounted, setPlayMounted] = useState(activeTab === 'play');
+  useEffect(() => {
+    if (activeTab === 'play') setPlayMounted(true);
+    try { sessionStorage.setItem('checkmate_tab', activeTab); } catch { /* Storage may be unavailable. */ }
+  }, [activeTab]);
   const [preferences, setPreferences] = useState<UserPreferences>(loadPreferences);
   const [localArchivedGames, setLocalArchivedGames] = useState<ArchivedGame[]>(loadArchive);
   const [newGameTrigger, setNewGameTrigger] = useState(0);
@@ -165,14 +175,14 @@ export default function App() {
     { id: 'practice', label: 'Practice' },
     { id: 'play', label: 'Play Bots' },
     { id: 'customize', label: 'Customize' },
-    { id: 'membership', label: 'Membership' },
+    { id: 'membership', label: 'Account' },
   ];
 
   const primaryCtaLabel = !user
     ? 'Sign In'
     : effectiveTier === 'pro'
-    ? 'Checkmate Pro'
-    : 'Unlock Pro';
+    ? demoEnabled ? 'Demo access' : 'Checkmate Pro'
+    : 'Explore demo';
 
   return (
     <MotionConfig reducedMotion="user">
@@ -211,6 +221,7 @@ export default function App() {
 
             <button
               type="button"
+              disabled={authLoading || !authReady}
               onClick={() => {
                 if (!user) {
                   void signInWithGoogle();
@@ -220,14 +231,18 @@ export default function App() {
               }}
               className="px-4 py-1.5 rounded-lg bg-[#E5A93C] hover:bg-[#F0B952] text-[#0E131B] font-display font-bold text-xs tracking-tight transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer"
             >
-              {primaryCtaLabel}
+              {!authReady ? 'Loading sign-in…' : authLoading ? 'Signing in…' : primaryCtaLabel}
             </button>
           </div>
         </header>
 
         {/* Main Workspace */}
+        {authError && <div role="alert" className="flex justify-between gap-3 border-b border-red-400/20 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+          <span>{authError}</span><button onClick={clearAuthError} className="underline">Dismiss</button>
+        </div>}
         <main className="flex-1">
-          <div className={activeTab === 'play' ? 'block' : 'hidden'}>
+          <Suspense fallback={<p role="status" className="p-8 text-center text-slate-400">Loading workspace…</p>}>
+          {playMounted && <div className={activeTab === 'play' ? 'block' : 'hidden'}>
             <PlayBotsView
               preferences={preferences}
               onToggleSound={() =>
@@ -249,7 +264,7 @@ export default function App() {
               onDrillRepertoireLine={handleDrillRepertoireLine}
               onSaveCustomPrep={handleSaveCustomPrep}
             />
-          </div>
+          </div>}
 
           <AnimatePresence mode="wait">
             {activeTab === 'courses' && (
@@ -312,6 +327,7 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
+          </Suspense>
         </main>
       </div>
     </MotionConfig>

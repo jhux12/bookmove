@@ -1,3 +1,6 @@
+import { CourseDepthPicker } from './CourseDepthPicker';
+import { CourseDepth, getDepthLines } from '../data/openingCurriculum';
+import { Modal } from './ui/Modal';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
 import { AnimatePresence, motion } from 'motion/react';
@@ -101,13 +104,17 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
   const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
 
   // Active selection: built-in course, custom line, or random learned session
+  const [depthCourse, setDepthCourse] = useState<OpeningCourse | null>(null);
+  const [courseDepths, setCourseDepths] = useState<Record<string,CourseDepth>>(() => {
+    try { const data = JSON.parse(localStorage.getItem('checkmate_course_depths_v1') || '{}'); return Object.fromEntries(Object.entries(data).filter(([,v])=>['essentials','advanced','full'].includes(v as string))) as Record<string,CourseDepth>; } catch { return {}; }
+  });
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [selectedVariationId, setSelectedVariationId] = useState<string | null>(null);
   const [activeCustomLine, setActiveCustomLine] = useState<CustomOpeningLine | null>(null);
   const [studioMode, setStudioMode] = useState<StudioMode>('learn');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Random Practice of perfected lines only (+ Daily 5-Line Session, Mix filters, Branch, Blitz 5s)
+  // Random Practice of learned lines only (+ Daily 5-Line Session, Mix filters, Branch, Blitz 5s)
   const [randomLine, setRandomLine] = useState<LearnedLineEntry | null>(null);
   const [randomStreak, setRandomStreak] = useState(0);
   const [mixColor, setMixColor] = useState<'all' | 'w' | 'b'>('all');
@@ -185,8 +192,8 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
     [selectedCourseId]
   );
 
-  // Strictly perfected & unlocked lines ONLY (masteryPct >= 80, i.e., passed with 0 mistakes)
-  const perfectedPool = useMemo<LearnedLineEntry[]>(() => {
+  // Strictly learned & unlocked lines ONLY (masteryPct >= 80, i.e., passed with 0 mistakes)
+  const learnedPool = useMemo<LearnedLineEntry[]>(() => {
     const now = Date.now();
     const pool: LearnedLineEntry[] = [];
 
@@ -235,13 +242,13 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
   }, [effectiveTier, lineProgress, customLines]);
 
   const filteredRandomPool = useMemo<LearnedLineEntry[]>(() => {
-    return perfectedPool.filter((item) => {
+    return learnedPool.filter((item) => {
       if (mixColor !== 'all' && item.playerColor !== mixColor) return false;
       if (mixDueOnly && !item.isDue) return false;
       if (mixCourseId !== 'all' && item.variation.courseId !== mixCourseId) return false;
       return true;
     });
-  }, [perfectedPool, mixColor, mixDueOnly, mixCourseId]);
+  }, [learnedPool, mixColor, mixDueOnly, mixCourseId]);
 
   const activeVariation: OpeningVariation | null = useMemo(() => {
     if (randomLine) return randomLine.variation;
@@ -279,7 +286,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
   // Aggregate stats + streak across all catalog lines
   const catalogStats = useMemo(() => {
     let totalLines = 0;
-    let perfectedCount = 0;
+    let learnedCount = 0;
     let whiteReady = 0;
     let blackReady = 0;
 
@@ -288,7 +295,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
         totalLines++;
         const prog = lineProgress[v.id];
         if (prog && prog.masteryPct >= 80) {
-          perfectedCount++;
+          learnedCount++;
           if (isVariationUnlocked(c.id, v.id, effectiveTier)) {
             if (c.playerColor === 'w') whiteReady++;
             else blackReady++;
@@ -297,7 +304,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
       }
     }
     const { streakDays, practicedToday } = computeTrainingStreak(lineProgress);
-    return { totalLines, perfectedCount, whiteReady, blackReady, streakDays, practicedToday };
+    return { totalLines, learnedCount, whiteReady, blackReady, streakDays, practicedToday };
   }, [lineProgress, effectiveTier]);
 
   const filteredCourses = useMemo(() => {
@@ -494,14 +501,19 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
   );
 
   const openCourse = useCallback(
-    (course: OpeningCourse, targetVariationId?: string) => {
+    (course: OpeningCourse, targetVariationId?: string, depth?: CourseDepth) => {
       if (!isCourseUnlocked(course.id, effectiveTier)) {
         onOpenMembership();
         return;
       }
+      const chosenDepth = targetVariationId ? 'full' : depth ?? courseDepths[course.id] ?? 'essentials';
+      const nextDepths = {...courseDepths,[course.id]:chosenDepth};
+      setCourseDepths(nextDepths);
+      try { localStorage.setItem('checkmate_course_depths_v1',JSON.stringify(nextDepths)); } catch { /* Storage is optional. */ }
+      const available = getDepthLines(course,chosenDepth);
       const chosen =
         (targetVariationId && course.variations.find((v) => v.id === targetVariationId)) ||
-        course.variations.find((v) => isVariationUnlocked(course.id, v.id, effectiveTier)) ||
+        available.find((v) => isVariationUnlocked(course.id, v.id, effectiveTier)) ||
         course.variations[0];
 
       if (chosen && !isVariationUnlocked(course.id, chosen.id, effectiveTier)) {
@@ -522,7 +534,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
       setLearnAutoActive(true);
       if (chosen) initDrillForVariation(chosen, course.playerColor);
     },
-    [effectiveTier, onOpenMembership, initDrillForVariation]
+    [effectiveTier, onOpenMembership, initDrillForVariation, courseDepths]
   );
 
   const openCustomLineStudio = useCallback(
@@ -559,14 +571,14 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
   const startRandomPractice = useCallback(
     (avoidLineId?: string, overridePool?: LearnedLineEntry[]) => {
       const sourcePool = overridePool ?? filteredRandomPool;
-      if (perfectedPool.length === 0) {
+      if (learnedPool.length === 0) {
         setCatalogNotice(
-          'No perfected lines yet. Complete the Italian preview line with guide arrows, then pass it flawlessly (0 mistakes) to unlock random practice.'
+          'No learned lines yet. Complete the Italian preview line with guide arrows, then pass it flawlessly (0 mistakes) to unlock random practice.'
         );
         return;
       }
       if (sourcePool.length === 0) {
-        setCatalogNotice('No perfected lines match your current filter. Showing all perfected lines.');
+        setCatalogNotice('No learned lines match your current filter. Showing all learned lines.');
         return;
       }
       setCatalogNotice(null);
@@ -608,12 +620,12 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
       setStudioMode('drill');
       initDrillForVariation(pick.variation, pick.playerColor);
     },
-    [perfectedPool.length, filteredRandomPool, branchMode, randomLine, initDrillForVariation]
+    [learnedPool.length, filteredRandomPool, branchMode, randomLine, initDrillForVariation]
   );
 
-  // One-click Today's 5-Line Session (or direct start into free Italian line if none perfected yet)
+  // One-click Today's 5-Line Session (or direct start into free Italian line if none learned yet)
   const startDailySession = () => {
-    if (perfectedPool.length === 0) {
+    if (learnedPool.length === 0) {
       const italian = OPENING_COURSES.find((c) => c.id === FREE_PREVIEW_COURSE_ID);
       if (italian) {
         openCourse(italian, FREE_PREVIEW_VARIATION_ID);
@@ -621,7 +633,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
       return;
     }
 
-    const sorted = [...perfectedPool].sort((a, b) => {
+    const sorted = [...learnedPool].sort((a, b) => {
       if (a.isDue !== b.isDue) return a.isDue ? -1 : 1;
       return a.attempts - b.attempts;
     });
@@ -672,7 +684,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
     }
   };
 
-  // Open custom builder (gated to Checkmate Pro)
+  // Open custom builder (gated to the full demo)
   const openCustomBuilder = useCallback(
     (prefill?: CustomLineSeed) => {
       if (effectiveTier === 'free') {
@@ -734,6 +746,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
   useEffect(() => {
     if (!activeVariation || studioMode !== 'learn' || randomLine || showBuilder) return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || (e.target instanceof Element && e.target.closest('dialog, input, textarea, [data-square]'))) return;
       if (e.key === 'ArrowLeft') {
         setLearnAutoActive(false);
         setLearnNotice(null);
@@ -789,7 +802,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
       setDrillFeedback({
         type: flawless ? 'done' : 'error',
         text: flawless
-          ? 'Flawless recall! Line perfected and added to your random practice pool.'
+          ? 'Line learned! It is now ready for review.'
           : `${mistakesCount} mistake${mistakesCount === 1 ? '' : 's'} recorded. Retry with 0 mistakes to perfect this line.`,
       });
       const updated = await recordLinePractice(
@@ -1039,6 +1052,8 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
     }
   };
 
+  const depthPicker = depthCourse ? <CourseDepthPicker key={depthCourse.id} course={depthCourse} initialDepth={courseDepths[depthCourse.id] ?? 'essentials'} previewOnly={effectiveTier === 'free'} onClose={() => setDepthCourse(null)} onSelect={(depth) => { openCourse(depthCourse,undefined,depth); setDepthCourse(null); }} /> : null;
+
   // ---------------- RENDER: RANDOM LEARNED PRACTICE STAGE ----------------
   if (randomLine && activeVariation) {
     const inDaily = Boolean(dailySession && !dailySession.completedModal);
@@ -1105,6 +1120,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
 
     return (
       <>
+        {depthPicker}
         <CoachBoardStage
           onBack={() => {
             setRandomLine(null);
@@ -1188,7 +1204,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-500">
               <span className="font-mono text-[#2EB88A]">Streak: {randomStreak}</span>
               <span>·</span>
-              <span>{filteredRandomPool.length} perfected matching</span>
+              <span>{filteredRandomPool.length} learned matching</span>
               {branchHintText && (
                 <span className="text-amber-700 font-semibold">{branchHintText}</span>
               )}
@@ -1280,13 +1296,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
         {/* Mix Filters Modal */}
         <AnimatePresence>
           {showMixSheet && !inDaily && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[#0E131B]/75 backdrop-blur-xs p-0 sm:p-4"
-              onClick={() => setShowMixSheet(false)}
-            >
+            <Modal label="Practice filters" onClose={() => setShowMixSheet(false)}>
               <motion.div
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1301,7 +1311,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                       Random Mix Filters
                     </h2>
                     <p className="text-xs text-slate-400">
-                      {filteredRandomPool.length} of {perfectedPool.length} perfected lines match
+                      {filteredRandomPool.length} of {learnedPool.length} learned lines match
                     </p>
                   </div>
                   <button
@@ -1359,7 +1369,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                       onChange={(e) => setMixCourseId(e.target.value)}
                       className="w-full bg-[#0F151E] border border-slate-400/15 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-[#E5A93C]"
                     >
-                      <option value="all">All Courses ({perfectedPool.length} perfected)</option>
+                      <option value="all">All Courses ({learnedPool.length} learned)</option>
                       {OPENING_COURSES.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.title.split(':')[0]}
@@ -1402,7 +1412,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                   </button>
                 </div>
               </motion.div>
-            </motion.div>
+            </Modal>
           )}
         </AnimatePresence>
 
@@ -1464,7 +1474,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
           open={Boolean(dailySession?.completedModal)}
           variant="win"
           title="Today's Session Complete!"
-          subtitle={`${dailySession?.total ?? 0} Perfected Lines Reviewed`}
+          subtitle={`${dailySession?.total ?? 0} Learned Lines Reviewed`}
           details={`Streak: ${catalogStats.streakDays} day${
             catalogStats.streakDays === 1 ? '' : 's'
           } · Your repertoire recall is sharp`}
@@ -1486,7 +1496,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
 
   // ---------------- RENDER: COURSE STUDIO ----------------
   if ((selectedCourse || activeCustomLine) && activeVariation) {
-    const variations = selectedCourse ? selectedCourse.variations : [];
+    const variations = selectedCourse ? getDepthLines(selectedCourse,courseDepths[selectedCourse.id] ?? 'essentials') : [];
     const currentVarIdx = variations.findIndex((v) => v.id === activeVariation.id);
     const hasNextVar = selectedCourse && currentVarIdx >= 0 && currentVarIdx < variations.length - 1;
     const nextVar = hasNextVar ? variations[currentVarIdx + 1] : null;
@@ -1496,7 +1506,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
         : false;
 
     const prog = lineProgress[activeVariation.id];
-    const isLinePerfected = Boolean(prog && prog.masteryPct >= 80);
+    const isLineLearned = Boolean(prog && prog.masteryPct >= 80);
 
     // Compute Weak-Spot Heatmap for current line
     const weakEntries = Object.entries(prog?.weakPlies ?? {})
@@ -1577,12 +1587,12 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
         ? !nextVarUnlocked
           ? {
               id: 'unlock-next',
-              label: 'Unlock Pro',
+              label: 'Explore demo',
               icon: <Lock className="w-4 h-4" />,
               onClick: onOpenMembership,
               primary: true,
             }
-          : isLinePerfected
+          : isLineLearned
           ? {
               id: 'next-line',
               label: 'Next Line',
@@ -1597,7 +1607,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
               onClick: () => switchMode('learn'),
               primary: true,
             }
-        : perfectedPool.length > 0
+        : learnedPool.length > 0
         ? {
             id: 'practice-mix',
             label: 'Practice Mix',
@@ -1618,7 +1628,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
         ? [
             {
               id: 'lines',
-              label: selectedCourse ? 'Lines' : 'Details',
+              label: selectedCourse ? 'Lessons' : 'Details',
               icon: <List className="w-4 h-4" />,
               onClick: () => setShowStudioSheet(true),
               active: showStudioSheet,
@@ -1646,7 +1656,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
             },
             {
               id: 'next',
-              label: guidedFinished ? 'Flawless Test' : 'Next',
+              label: guidedFinished ? 'Memory Test' : 'Next',
               icon: guidedFinished ? (
                 <Target className="w-4 h-4" />
               ) : (
@@ -1667,7 +1677,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
         : [
             {
               id: 'lines',
-              label: selectedCourse ? 'Lines' : 'Heatmap',
+              label: selectedCourse ? 'Lessons' : 'Review mistakes',
               icon: <List className="w-4 h-4" />,
               onClick: () => setShowStudioSheet(true),
               active: showStudioSheet,
@@ -1690,6 +1700,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
 
     return (
       <>
+        {depthPicker}
         <CoachBoardStage
           onBack={() => {
             setSelectedCourseId(null);
@@ -1751,7 +1762,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                   }`}
                 >
                   <BookOpen className="w-3.5 h-3.5" />
-                  <span>1. Guided Learn</span>
+                  <span>1. Learn</span>
                 </button>
                 <button
                   type="button"
@@ -1763,20 +1774,11 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                   }`}
                 >
                   <Target className="w-3.5 h-3.5" />
-                  <span>2. Flawless Test</span>
+                  <span>2. Test</span>
                 </button>
               </div>
-              {perfectedPool.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => startRandomPractice()}
-                  title={`Practice ${perfectedPool.length} perfected lines randomly`}
-                  className="px-3 py-2 rounded-xl bg-[#161E29] hover:bg-[#222C3A] border border-slate-400/12 text-xs font-semibold text-[#2EB88A] flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Shuffle className="w-3.5 h-3.5" />
-                  <span>Mix ({perfectedPool.length})</span>
-                </button>
-              )}
+              {selectedCourse && <button onClick={() => setDepthCourse(selectedCourse)} className="min-h-10 px-2 rounded-lg text-xs text-slate-400 hover:text-white" aria-label="Change course depth">Depth</button>}
+
             </div>
           }
           barMode="progress"
@@ -1792,9 +1794,9 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
           }
           barRightLabel={
             studioMode === 'learn'
-              ? isLinePerfected
-                ? 'Perfected'
-                : 'Unperfected'
+              ? isLineLearned
+                ? 'Learned'
+                : 'Learning'
               : `Mistakes: ${drillMistakes}`
           }
           barFillColor={
@@ -1812,8 +1814,8 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
           chipText={
             studioMode === 'learn'
               ? `${learnPly}/${totalSteps}`
-              : isLinePerfected
-              ? 'Perfected'
+              : isLineLearned
+              ? 'Learned'
               : activeVariation.eco
           }
           comment={studioMode === 'learn' ? learnComment : drillFeedback.text}
@@ -1825,7 +1827,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                   onClick={() => switchMode('drill')}
                   className="text-emerald-700 hover:text-emerald-800 cursor-pointer"
                 >
-                  Start Flawless 0-Mistake Test →
+                  Start memory test →
                 </button>
               ) : upcomingStepObj && isPlayerTurnInLearn ? (
                 <div className="flex flex-wrap items-center justify-between gap-2 w-full">
@@ -1956,7 +1958,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                     const active = v.id === activeVariation.id;
                     const varUnlocked = isVariationUnlocked(selectedCourse.id, v.id, effectiveTier);
                     const lp = lineProgress[v.id];
-                    const perfected = (lp?.masteryPct ?? 0) >= 80;
+                    const learned = (lp?.masteryPct ?? 0) >= 80;
                     return (
                       <button
                         key={v.id}
@@ -1970,7 +1972,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                       >
                         {!varUnlocked ? (
                           <Lock className="w-3 h-3 text-[#E5A93C]" />
-                        ) : perfected ? (
+                        ) : learned ? (
                           <CheckCircle2 className="w-3 h-3 text-[#2EB88A]" />
                         ) : null}
                         <span>{v.name}</span>
@@ -2020,13 +2022,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
         {/* Course Lines & Weak-Spot Heatmap Modal Sheet */}
         <AnimatePresence>
           {showStudioSheet && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[#0E131B]/75 backdrop-blur-xs p-0 sm:p-4"
-              onClick={() => setShowStudioSheet(false)}
-            >
+            <Modal label="Course lessons" onClose={() => setShowStudioSheet(false)}>
               <motion.div
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -2118,7 +2114,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                         );
                         const lp = lineProgress[v.id];
                         const mastery = lp?.masteryPct ?? 0;
-                        const perfected = mastery >= 80;
+                        const learned = mastery >= 80;
                         return (
                           <button
                             key={v.id}
@@ -2136,7 +2132,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                             <span className="truncate flex items-center gap-2">
                               {!varUnlocked ? (
                                 <Lock className="w-3.5 h-3.5 text-[#E5A93C] shrink-0" />
-                              ) : perfected ? (
+                              ) : learned ? (
                                 <CheckCircle2 className="w-3.5 h-3.5 text-[#2EB88A] shrink-0" />
                               ) : null}
                               <span className="truncate">{v.name}</span>
@@ -2145,7 +2141,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                               className={`font-mono text-[11px] tabular-nums shrink-0 ${
                                 !varUnlocked
                                   ? 'text-[#E5A93C]'
-                                  : perfected
+                                  : learned
                                   ? 'text-[#2EB88A]'
                                   : mastery > 0
                                   ? 'text-[#E5A93C]'
@@ -2153,9 +2149,9 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                               }`}
                             >
                               {!varUnlocked
-                                ? 'Pro'
-                                : perfected
-                                ? 'Perfected'
+                                ? 'Demo'
+                                : learned
+                                ? 'Learned'
                                 : mastery > 0
                                 ? `${mastery}%`
                                 : effectiveTier === 'free'
@@ -2169,7 +2165,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                   </div>
                 )}
 
-                {perfectedPool.length > 0 && (
+                {learnedPool.length > 0 && (
                   <button
                     type="button"
                     onClick={() => {
@@ -2179,15 +2175,15 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                     className="w-full py-2.5 px-4 rounded-xl bg-[#2EB88A] hover:bg-[#38C998] text-[#0E131B] font-display font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Shuffle className="w-4 h-4" />
-                    <span>Practice Learned Lines ({perfectedPool.length})</span>
+                    <span>Practice Learned Lines ({learnedPool.length})</span>
                   </button>
                 )}
               </motion.div>
-            </motion.div>
+            </Modal>
           )}
         </AnimatePresence>
 
-        {/* Flawless Test Completion Modal (Gates Next Line on 0 Mistakes + Pro Lock) */}
+        {/* Memory Test Completion Modal (Gates Next Line on 0 Mistakes + Pro Lock) */}
         <ResultOverlayModal
           open={drillCompleteModal.open}
           variant={drillCompleteModal.mistakes === 0 ? 'puzzle' : 'draw'}
@@ -2197,7 +2193,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                 ? 'Weak Spot Cleared!'
                 : 'Weak Spot Needs Another Pass'
               : drillCompleteModal.mistakes === 0
-              ? 'Line Perfected!'
+              ? 'Line learned!'
               : 'Mistakes Detected — Retry'
           }
           subtitle={activeVariation.name}
@@ -2212,14 +2208,14 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
           }
           primaryLabel={
             drillCompleteModal.wasWeakSpotJump
-              ? 'Run Full Line Flawlessly'
+              ? 'Test the full line'
               : drillCompleteModal.mistakes === 0
               ? hasNextVar
                 ? nextVarUnlocked
                   ? 'Next Line'
-                  : 'Unlock All 48 Lines (Pro)'
+                  : 'Explore full demo'
                 : 'Practice Learned Lines'
-              : 'Retry Flawlessly'
+              : 'Try again'
           }
           onPrimary={() => {
             const wasFlawless = drillCompleteModal.mistakes === 0;
@@ -2269,6 +2265,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
   // ---------------- RENDER: COURSE CATALOG ----------------
   return (
     <div className="max-w-[1240px] mx-auto px-4 sm:px-6 py-6 space-y-6">
+      {depthPicker}
       {/* Catalog Header & Filters */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -2279,8 +2276,8 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
             Learn a line. Test your memory. Make it yours.
           </p>
           <p className="text-xs text-slate-400 mt-3 tabular-nums">
-            {catalogStats.perfectedCount > 0
-              ? `${catalogStats.perfectedCount} of ${catalogStats.totalLines} lines learned · ${perfectedPool.length} ready to practice`
+            {catalogStats.learnedCount > 0
+              ? `${catalogStats.learnedCount} of ${catalogStats.totalLines} lines learned · ${learnedPool.length} ready to practice`
               : effectiveTier === 'free'
               ? 'Try a free Italian Game lesson. No account needed.'
               : 'Choose a course to begin.'}
@@ -2292,7 +2289,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
           onClick={startDailySession}
           className="min-h-11 px-5 py-2.5 rounded-xl bg-[#E5A93C] hover:bg-[#F0B952] text-[#0E131B] text-sm font-display font-bold inline-flex items-center gap-2 transition-colors cursor-pointer"
         >
-          <span>{perfectedPool.length > 0 ? "Start today's practice" : 'Start free lesson'}</span>
+          <span>{learnedPool.length > 0 ? "Start today's practice" : 'Start free lesson'}</span>
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
@@ -2328,7 +2325,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
               [
                 { id: 'all', label: 'All Courses' },
                 { id: 'free', label: 'Free' },
-                { id: 'paid', label: 'Pro' },
+                { id: 'paid', label: 'Demo' },
               ] as const
             ).map((opt) => (
               <button
@@ -2346,13 +2343,13 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
             ))}
           </div>
 
-          {perfectedPool.length > 0 && (
+          {learnedPool.length > 0 && (
             <button
               type="button"
               onClick={() => startRandomPractice()}
               className="min-h-10 px-3 text-xs text-slate-300 hover:text-white cursor-pointer"
             >
-              Practice learned ({perfectedPool.length})
+              Practice learned ({learnedPool.length})
             </button>
           )}
           <button
@@ -2361,7 +2358,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
             className="min-h-10 px-3 text-xs text-slate-400 hover:text-white inline-flex items-center gap-1.5 cursor-pointer sm:ml-auto"
           >
             <Plus className="w-3.5 h-3.5" />
-            Custom line{effectiveTier === 'free' ? ' · Pro' : ''}
+            Custom line{effectiveTier === 'free' ? ' · Demo' : ''}
           </button>
         </div>
 
@@ -2392,11 +2389,11 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
         {filteredCourses.map((course) => {
           const unlocked = isCourseUnlocked(course.id, effectiveTier);
           const totalVars = course.variations.length;
-          const perfectedVars = course.variations.filter(
+          const learnedVars = course.variations.filter(
             (v) => (lineProgress[v.id]?.masteryPct ?? 0) >= 80
           ).length;
           const courseMastery =
-            totalVars > 0 ? Math.round((perfectedVars / totalVars) * 100) : 0;
+            totalVars > 0 ? Math.round((learnedVars / totalVars) * 100) : 0;
           const isPreviewCourse =
             course.id === FREE_PREVIEW_COURSE_ID && effectiveTier === 'free';
 
@@ -2404,8 +2401,8 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
             <motion.button
               key={course.id}
               type="button"
-              aria-label={`${course.title}${!unlocked ? ' · Pro course' : ''}`}
-              onClick={() => openCourse(course)}
+              aria-label={`${course.title}${!unlocked ? ' · Demo course' : ''}`}
+              onClick={() => isCourseUnlocked(course.id,effectiveTier) ? setDepthCourse(course) : onOpenMembership()}
               className="group text-left w-full bg-[#161E29] border border-slate-400/12 hover:border-[#E5A93C]/50 rounded-2xl p-5 flex flex-col justify-between gap-4 cursor-pointer transition-colors"
             >
               <div className="space-y-3">
@@ -2441,7 +2438,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                   {!unlocked ? (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#E5A93C] shrink-0">
                       <Lock className="w-3.5 h-3.5" />
-                      <span>Pro</span>
+                      <span>Demo</span>
                     </span>
                   ) : isPreviewCourse ? (
                     <span className="text-[11px] font-semibold text-[#2EB88A] shrink-0 font-mono tabular-nums">
@@ -2450,7 +2447,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                   ) : (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2EB88A] shrink-0">
                       <Crown className="w-3.5 h-3.5" />
-                      <span>Pro</span>
+                      <span>Demo</span>
                     </span>
                   )}
                 </div>
@@ -2469,7 +2466,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-400">
                     <span>
-                      {perfectedVars} / {totalVars} perfected
+                      {learnedVars} / {totalVars} learned
                     </span>
                     <span className={courseMastery >= 80 ? 'text-[#2EB88A]' : 'text-slate-200'}>
                       {courseMastery}%
@@ -2491,7 +2488,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                       ? 'Preview Free Line'
                       : unlocked
                       ? 'Learn & Perfect Lines'
-                      : 'Unlock course · Pro'}
+                      : 'Explore full demo'}
                   </span>
                   <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
                 </div>
@@ -2521,7 +2518,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
             {effectiveTier === 'free' ? (
               <>
                 <Lock className="w-3.5 h-3.5 text-[#E5A93C]" />
-                <span>Unlock Builder (Pro)</span>
+                <span>Explore the builder demo</span>
               </>
             ) : (
               <>
@@ -2535,7 +2532,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
         {customLines.length === 0 ? (
           <p className="text-xs text-slate-500">
             {effectiveTier === 'free'
-              ? 'Subscribe to Checkmate Pro to author, import PGNs, and sync custom repertoire lines across devices.'
+              ? 'Explore the full demo to create personal lines or import a PGN. Sign in to keep your work across devices.'
               : 'No custom lines saved yet. Click "Add Custom Line" to record moves or paste a PGN.'}
           </p>
         ) : (
@@ -2555,7 +2552,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                       <span className="text-slate-500 font-mono">
                         · {line.playerColor === 'w' ? 'White' : 'Black'} ·{' '}
                         {Math.ceil(line.moves.length / 2)} moves ·{' '}
-                        {mastery >= 80 ? 'Perfected' : `${mastery}%`}
+                        {mastery >= 80 ? 'Learned' : `${mastery}%`}
                       </span>
                     </div>
                     <p className="font-mono text-[11px] text-slate-400 truncate mt-0.5">
@@ -2608,14 +2605,8 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
       {/* Custom Line Builder Modal */}
       <AnimatePresence>
         {showBuilder && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E131B]/75 backdrop-blur-xs overflow-y-auto"
-            onClick={() => setShowBuilder(false)}
-          >
-            <motion.div
+          <Modal label="Custom line editor" onClose={() => setShowBuilder(false)} className="max-w-[900px]">
+              <motion.div
               initial={{ opacity: 0, scale: 0.96, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97 }}
@@ -2813,7 +2804,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                 </div>
               </div>
             </motion.div>
-          </motion.div>
+          </Modal>
         )}
       </AnimatePresence>
     </div>
