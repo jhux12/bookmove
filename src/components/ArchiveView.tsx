@@ -1,3 +1,4 @@
+import { CoachFeedback } from './CoachFeedback';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess } from 'chess.js';
 import { AnimatePresence, motion } from 'motion/react';
@@ -83,7 +84,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
   const [showBestArrow, setShowBestArrow] = useState(false);
   const [showBestLinePreview, setShowBestLinePreview] = useState(false);
   const [showReportDrawer, setShowReportDrawer] = useState(false);
-  const [coachAvatarFailed, setCoachAvatarFailed] = useState(false);
 
   const moveStripRef = useRef<HTMLDivElement>(null);
   const activeMoveBtnRef = useRef<HTMLButtonElement>(null);
@@ -167,10 +167,12 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
   // Auto-scroll active move button cleanly into view inside the inline move ribbon
   useEffect(() => {
     if (activeMoveBtnRef.current && moveStripRef.current) {
-      activeMoveBtnRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-        inline: 'center',
+      const strip = moveStripRef.current;
+      const move = activeMoveBtnRef.current;
+      // Scroll only the ribbon; scrollIntoView also moves the page and board.
+      strip.scrollTo({
+        left: strip.scrollLeft + move.getBoundingClientRect().left - strip.getBoundingClientRect().left - (strip.clientWidth - move.offsetWidth) / 2,
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
       });
     }
   }, [viewPly]);
@@ -343,81 +345,32 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
           </span>
         </div>
 
-        {/* 3. Coach Avatar + Speech Bubble */}
-        <div className="flex items-end gap-3">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-[#161E29] border border-slate-400/20 shrink-0 shadow-md">
-            {!coachAvatarFailed ? (
-              <img
-                src="/src/assets/images/bot_avatar_viktor_1794860679687.jpg"
-                alt="Chess coach"
-                referrerPolicy="no-referrer"
-                onError={() => setCoachAvatarFailed(true)}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center font-display font-bold text-slate-200 text-base">
-                CM
-              </div>
-            )}
-          </div>
-
-          <div className="relative flex-1 min-w-0 bg-white text-[#141B24] rounded-2xl px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
-            {/* Speech pointer tail */}
-            <div
-              className="absolute -left-1.5 bottom-4 w-3 h-3 rotate-45 bg-white rounded-[2px]"
-              aria-hidden="true"
-            />
-
-            <div className="relative flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <span
-                  className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-white font-display font-extrabold text-[10px]"
-                  style={{ backgroundColor: showBestLinePreview ? '#81B64C' : badgeMeta.color }}
-                >
-                  {!showBestLinePreview && currentItem?.classification === 'book' ? (
-                    <BookOpen className="w-3 h-3" />
-                  ) : showBestLinePreview ? (
-                    '★'
-                  ) : (
-                    badgeMeta.short
-                  )}
-                </span>
-                <span className="font-display font-bold text-sm text-[#141B24] truncate">
-                  {showBestLinePreview && bestContinuation
-                    ? `Best line: ${bestContinuation.bestMove.san}${
-                        bestContinuation.replyMove ? ` → ${bestContinuation.replyMove.san}` : ''
-                      }`
-                    : currentItem
-                    ? currentItem.headline
-                    : `${reviewGame.openingName}`}
-                </span>
-              </div>
-
-              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono text-xs font-bold tabular-nums shrink-0">
-                {evalDisplay}
-              </span>
-            </div>
-
-            <p className="relative text-xs sm:text-[13px] text-slate-600 leading-snug mt-1">
-              {showBestLinePreview && bestContinuation
-                ? `Playing ${bestContinuation.bestMove.san} improves piece activity and keeps the cleanest evaluation${
-                    bestContinuation.replyMove
-                      ? `, meeting ${bestContinuation.replyMove.san} comfortably.`
-                      : '.'
-                  }`
-                : currentItem
-                ? currentItem.comment
-                : `vs ${reviewGame.botName} (${reviewGame.botElo}) · Tap Next to step through the game move by move.`}
-            </p>
-
-            {/* Contextual inline action inside coach bubble (only on deviation or preview) */}
-            {(isAtDeviation || showBestLinePreview) && (
-              <div className="relative flex flex-wrap items-center gap-3 mt-1.5 pt-1.5 border-t border-slate-200/80 text-[11px] font-semibold">
+        <CoachFeedback
+          badgeColor={showBestLinePreview ? '#81B64C' : badgeMeta.color}
+          badgeContent={
+            !showBestLinePreview && currentItem?.classification === 'book'
+              ? <BookOpen className="w-3 h-3" />
+              : showBestLinePreview ? '★' : badgeMeta.short
+          }
+          headline={
+            showBestLinePreview && bestContinuation
+              ? `Best line: ${bestContinuation.bestMove.san}${bestContinuation.replyMove ? ` → ${bestContinuation.replyMove.san}` : ''}`
+              : currentItem ? currentItem.headline : reviewGame.openingName
+          }
+          chipText={evalDisplay}
+          comment={
+            showBestLinePreview && bestContinuation
+              ? `Playing ${bestContinuation.bestMove.san} improves piece activity and keeps the cleanest evaluation${bestContinuation.replyMove ? `, meeting ${bestContinuation.replyMove.san} comfortably.` : '.'}`
+              : currentItem ? currentItem.comment
+              : `vs ${reviewGame.botName} (${reviewGame.botElo}) · Tap Next to step through the game move by move.`
+          }
+          bubbleActions={(isAtDeviation || showBestLinePreview) ? (
+              <div className="flex flex-wrap items-center gap-3">
                 {showBestLinePreview && (
                   <button
                     type="button"
                     onClick={() => setShowBestLinePreview(false)}
-                    className="text-[#4F7D24] hover:underline cursor-pointer"
+                    className="text-[#F7D08A] hover:underline cursor-pointer"
                   >
                     Return to game move
                   </button>
@@ -431,7 +384,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                         bookReport.matchedVariationId!
                       )
                     }
-                    className="text-[#4F7D24] hover:underline cursor-pointer"
+                    className="text-[#F7D08A] hover:underline cursor-pointer"
                   >
                     Drill {bookReport.matchedLineName.split('—')[1]?.trim() || 'this line'} →
                   </button>
@@ -447,15 +400,14 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                         notes: `Sideline played by ${reviewGame.botName} on move ${bookReport.deviationMoveNumber}.`,
                       })
                     }
-                    className="text-amber-700 hover:underline cursor-pointer"
+                    className="text-[#F7D08A] hover:underline cursor-pointer"
                   >
                     Save sideline →
                   </button>
                 )}
               </div>
-            )}
-          </div>
-        </div>
+          ) : undefined}
+        />
 
         {/* 4. Clean Chessboard */}
         <div className="w-full">
@@ -592,7 +544,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
           <button
             type="button"
             onClick={handleStepNext}
-            className="min-h-[48px] px-4 rounded-xl bg-[#81B64C] hover:bg-[#91C65C] text-white font-display font-bold text-sm flex items-center justify-center gap-1.5 shadow-[0_6px_18px_rgba(129,182,76,0.28)] transition-colors cursor-pointer whitespace-nowrap"
+            className="min-h-[48px] px-4 rounded-xl bg-[#E5A93C] hover:bg-[#F0B952] text-[#0E131B] font-display font-bold text-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
           >
             {atEnd ? (
               <>

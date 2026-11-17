@@ -179,16 +179,16 @@ export default function App() {
       <div className="min-h-screen bg-[#0E131B] text-[#F1F5F9] flex flex-col">
         {/* Top Bar Contract: Brand wordmark — 5 nav links — 1 primary action */}
         <header className="border-b border-slate-400/10 bg-[#0A0E14]/95 backdrop-blur-md">
-          <div className="max-w-[1240px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-6">
+          <div className="max-w-[1240px] mx-auto px-4 sm:px-6 flex flex-wrap sm:flex-nowrap items-center justify-between gap-x-4 sm:gap-6">
             <button
               type="button"
               onClick={() => setActiveTab('courses')}
-              className="font-display text-lg font-extrabold tracking-tight text-white whitespace-nowrap shrink-0 cursor-pointer"
+              className="font-display text-lg font-extrabold tracking-tight text-white whitespace-nowrap shrink-0 cursor-pointer h-14 flex items-center"
             >
               Checkmate
             </button>
 
-            <nav className="flex items-center gap-4 sm:gap-7 overflow-x-auto">
+            <nav aria-label="Main navigation" className="order-3 sm:order-none w-full sm:w-auto flex items-center gap-5 sm:gap-7 overflow-x-auto no-scrollbar">
               {navItems.map((item) => {
                 const isActive = activeTab === item.id;
                 return (
@@ -196,7 +196,8 @@ export default function App() {
                     key={item.id}
                     type="button"
                     onClick={() => setActiveTab(item.id)}
-                    className={`py-1 text-sm font-medium transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer border-b-2 ${
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`min-h-11 sm:min-h-14 text-xs sm:text-sm font-medium transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer border-b-2 ${
                       isActive
                         ? 'text-white border-[#E5A93C]'
                         : 'text-slate-400 border-transparent hover:text-white hover:border-slate-400/35'
@@ -254,9 +255,9 @@ export default function App() {
             {activeTab === 'courses' && (
               <motion.div
                 key="tab-courses"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
               >
                 <CoursesView
@@ -272,9 +273,9 @@ export default function App() {
             {activeTab === 'practice' && (
               <motion.div
                 key="tab-practice"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
               >
                 <PracticeView
@@ -287,9 +288,9 @@ export default function App() {
             {activeTab === 'customize' && (
               <motion.div
                 key="tab-customize"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
               >
                 <CustomizeView
@@ -302,9 +303,9 @@ export default function App() {
             {activeTab === 'membership' && (
               <motion.div
                 key="tab-membership"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
               >
                 <MembershipView onBrowseCourses={() => setActiveTab('courses')} />

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { CoachFeedback } from './CoachFeedback';
 
 export interface CoachBottomAction {
   id: string;
@@ -71,8 +72,6 @@ export const CoachBoardStage: React.FC<CoachBoardStageProps> = ({
   bottomActions,
   footerHint,
 }) => {
-  const [avatarFailed, setAvatarFailed] = useState(false);
-
   const clampedPct = Math.max(barMode === 'eval' ? 4 : 0, Math.min(barMode === 'eval' ? 96 : 100, barPct));
   const whiteLeading = clampedPct >= 50;
 
@@ -143,61 +142,14 @@ export const CoachBoardStage: React.FC<CoachBoardStageProps> = ({
         </div>
       )}
 
-      {/* 3. Coach Avatar + White Speech Bubble */}
-      <div className="flex items-end gap-3">
-        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-[#161E29] border border-slate-400/20 shrink-0 shadow-md">
-          {!avatarFailed ? (
-            <img
-              src="/src/assets/images/bot_avatar_viktor_1794860679687.jpg"
-              alt="Chess coach"
-              referrerPolicy="no-referrer"
-              onError={() => setAvatarFailed(true)}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center font-display font-bold text-slate-200 text-base">
-              CM
-            </div>
-          )}
-        </div>
-
-        <div className="relative flex-1 min-w-0 bg-white text-[#141B24] rounded-2xl px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
-          <div
-            className="absolute -left-1.5 bottom-4 w-3 h-3 rotate-45 bg-white rounded-[2px]"
-            aria-hidden="true"
-          />
-
-          <div className="relative flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span
-                className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-white font-display font-extrabold text-[10px]"
-                style={{ backgroundColor: badgeColor }}
-              >
-                {badgeContent}
-              </span>
-              <span className="font-display font-bold text-sm text-[#141B24] truncate">
-                {headline}
-              </span>
-            </div>
-
-            {chipText && (
-              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono text-xs font-bold tabular-nums shrink-0">
-                {chipText}
-              </span>
-            )}
-          </div>
-
-          <p className="relative text-xs sm:text-[13px] text-slate-600 leading-snug mt-1">
-            {comment}
-          </p>
-
-          {bubbleActions && (
-            <div className="relative flex flex-wrap items-center gap-3 mt-1.5 pt-1.5 border-t border-slate-200/80 text-[11px] font-semibold">
-              {bubbleActions}
-            </div>
-          )}
-        </div>
-      </div>
+      <CoachFeedback
+        badgeColor={badgeColor}
+        badgeContent={badgeContent}
+        headline={headline}
+        chipText={chipText}
+        comment={comment}
+        bubbleActions={bubbleActions}
+      />
 
       {/* 4. Clean Chessboard */}
       <div className="w-full">{board}</div>
@@ -221,7 +173,7 @@ export const CoachBoardStage: React.FC<CoachBoardStageProps> = ({
               type="button"
               onClick={act.onClick}
               disabled={act.disabled}
-              className="min-h-[48px] px-4 rounded-xl bg-[#81B64C] hover:bg-[#91C65C] disabled:opacity-45 disabled:pointer-events-none text-white font-display font-bold text-sm flex items-center justify-center gap-1.5 shadow-[0_6px_18px_rgba(129,182,76,0.28)] transition-colors cursor-pointer whitespace-nowrap"
+              className="min-h-[48px] px-2 sm:px-4 rounded-xl bg-[#E5A93C] hover:bg-[#F0B952] disabled:opacity-45 disabled:pointer-events-none text-[#0E131B] font-display font-bold text-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
             >
               {act.icon}
               <span>{act.label}</span>
@@ -234,7 +186,7 @@ export const CoachBoardStage: React.FC<CoachBoardStageProps> = ({
               disabled={act.disabled}
               className={`min-h-[48px] rounded-xl flex flex-col items-center justify-center gap-0.5 disabled:opacity-35 disabled:pointer-events-none transition-colors cursor-pointer ${
                 act.active
-                  ? 'bg-[#222C3A] text-[#81B64C]'
+                  ? 'bg-[#222C3A] text-[#E5A93C]'
                   : 'text-slate-300 hover:text-white hover:bg-[#161E29]'
               }`}
             >

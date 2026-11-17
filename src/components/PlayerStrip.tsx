@@ -67,7 +67,7 @@ export const PlayerStrip: React.FC<PlayerStripProps> = ({
           </div>
 
           {dialogue ? (
-            <p className="text-xs text-slate-300/80 truncate mt-0.5">{dialogue}</p>
+            <p className="h-4 leading-4 text-xs text-slate-300/80 truncate mt-0.5">{dialogue}</p>
           ) : (
             <div className="flex items-center gap-1 h-4 mt-0.5">
               {capturedPieces.length > 0 && (

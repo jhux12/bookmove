@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowLeft,
   BookOpen,
-  CalendarCheck2,
   Check,
   CheckCircle2,
   ChevronLeft,
@@ -2274,22 +2273,31 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-slate-100 tracking-tight">
-            Opening Repertoire Courses
+            Build your opening repertoire
           </h1>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1 font-mono tabular-nums">
-            <span>
-              {catalogStats.perfectedCount} / {catalogStats.totalLines} Lines Perfected
-            </span>
-            <span aria-hidden="true">·</span>
-            <span className={perfectedPool.length > 0 ? 'text-[#2EB88A]' : 'text-slate-400'}>
-              {perfectedPool.length} Ready for Random Practice
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>{effectiveTier === 'pro' ? 'Checkmate Pro' : 'Free Preview (1 Line)'}</span>
-          </div>
+          <p className="text-sm text-slate-400 mt-2 leading-relaxed">
+            Learn a line. Test your memory. Make it yours.
+          </p>
+          <p className="text-xs text-slate-400 mt-3 tabular-nums">
+            {catalogStats.perfectedCount > 0
+              ? `${catalogStats.perfectedCount} of ${catalogStats.totalLines} lines learned · ${perfectedPool.length} ready to practice`
+              : effectiveTier === 'free'
+              ? 'Try a free Italian Game lesson. No account needed.'
+              : 'Choose a course to begin.'}
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <button
+          type="button"
+          onClick={startDailySession}
+          className="min-h-11 px-5 py-2.5 rounded-xl bg-[#E5A93C] hover:bg-[#F0B952] text-[#0E131B] text-sm font-display font-bold inline-flex items-center gap-2 transition-colors cursor-pointer"
+        >
+          <span>{perfectedPool.length > 0 ? "Start today's practice" : 'Start free lesson'}</span>
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2.5">
           {/* Color Filter */}
           <div className="inline-flex items-center gap-1 p-1 bg-[#161E29] border border-slate-400/12 rounded-xl">
             {(
@@ -2319,8 +2327,8 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
             {(
               [
                 { id: 'all', label: 'All Courses' },
-                { id: 'free', label: 'Free Preview' },
-                { id: 'paid', label: 'Pro Repertoire' },
+                { id: 'free', label: 'Free' },
+                { id: 'paid', label: 'Pro' },
               ] as const
             ).map((opt) => (
               <button
@@ -2338,80 +2346,32 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={() => startRandomPractice()}
-            className="px-3.5 py-2 rounded-xl bg-[#2EB88A] hover:bg-[#38C998] text-[#0E131B] font-display font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <Shuffle className="w-3.5 h-3.5" />
-            <span>Practice Learned ({perfectedPool.length})</span>
-          </button>
-
+          {perfectedPool.length > 0 && (
+            <button
+              type="button"
+              onClick={() => startRandomPractice()}
+              className="min-h-10 px-3 text-xs text-slate-300 hover:text-white cursor-pointer"
+            >
+              Practice learned ({perfectedPool.length})
+            </button>
+          )}
           <button
             type="button"
             onClick={() => openCustomBuilder()}
-            className="px-3.5 py-2 rounded-xl bg-[#E5A93C] hover:bg-[#F0B952] text-[#0E131B] font-display font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+            className="min-h-10 px-3 text-xs text-slate-400 hover:text-white inline-flex items-center gap-1.5 cursor-pointer sm:ml-auto"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Custom Line</span>
+            Custom line{effectiveTier === 'free' ? ' · Pro' : ''}
           </button>
         </div>
-      </div>
 
-      {/* Daily Streak & Training Readiness Strip */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 bg-[#161E29] border border-slate-400/12 rounded-2xl p-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#0F151E] border border-slate-400/10 flex items-center justify-center shrink-0">
-            <Flame className="w-4 h-4 text-[#E5A93C]" />
-          </div>
-          <div>
-            <div className="text-[11px] text-slate-400">Daily Streak</div>
-            <div className="font-mono text-sm font-bold text-slate-100 tabular-nums">
-              {catalogStats.streakDays} day{catalogStats.streakDays === 1 ? '' : 's'} ·{' '}
-              <span className="text-[#2EB88A] font-medium">{catalogStats.practicedToday} today</span>
-            </div>
-          </div>
+      {catalogStats.streakDays > 0 && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400 border-y border-slate-400/10 py-3">
+          <span className="inline-flex items-center gap-1.5"><Flame className="w-3.5 h-3.5 text-[#E5A93C]" />{catalogStats.streakDays} day streak</span>
+          <span>{catalogStats.whiteReady} white lines ready</span>
+          <span>{catalogStats.blackReady} black lines ready</span>
         </div>
-
-        <div className="flex items-center gap-3">
-          <div className="w-7 h-7 shrink-0">
-            <ChessPieceSvg type="k" color="w" pieceSet={preferences.pieceSet} />
-          </div>
-          <div>
-            <div className="text-[11px] text-slate-400">White Ready</div>
-            <div className="font-mono text-sm font-bold text-slate-100 tabular-nums">
-              {catalogStats.whiteReady} perfected
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="w-7 h-7 shrink-0">
-            <ChessPieceSvg type="k" color="b" pieceSet={preferences.pieceSet} />
-          </div>
-          <div>
-            <div className="text-[11px] text-slate-400">Black Ready</div>
-            <div className="font-mono text-sm font-bold text-slate-100 tabular-nums">
-              {catalogStats.blackReady} perfected
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-start lg:justify-end">
-          <button
-            type="button"
-            onClick={startDailySession}
-            className="w-full lg:w-auto px-4 py-2.5 rounded-xl bg-[#222C3A] hover:bg-[#2C394A] border border-[#E5A93C]/35 text-xs font-display font-bold text-[#F7D08A] flex items-center justify-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <CalendarCheck2 className="w-4 h-4 text-[#E5A93C]" />
-            <span>
-              {perfectedPool.length > 0
-                ? "Today's 5-Line Session"
-                : 'Start Free Italian Preview'}
-            </span>
-          </button>
-        </div>
-      </section>
+      )}
 
       {catalogNotice && (
         <div className="px-4 py-3 rounded-xl bg-[#161E29] border border-[#E5A93C]/40 text-xs text-[#F7D08A] flex items-center justify-between gap-3">
@@ -2441,12 +2401,12 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
             course.id === FREE_PREVIEW_COURSE_ID && effectiveTier === 'free';
 
           return (
-            <motion.div
+            <motion.button
               key={course.id}
-              whileHover={{ y: -2 }}
-              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+              type="button"
+              aria-label={`${course.title}${!unlocked ? ' · Pro course' : ''}`}
               onClick={() => openCourse(course)}
-              className="group bg-[#161E29] border border-slate-400/12 hover:border-[#E5A93C]/50 rounded-2xl p-5 flex flex-col justify-between gap-4 cursor-pointer shadow-[0_10px_28px_rgba(0,0,0,0.22)] transition-colors"
+              className="group text-left w-full bg-[#161E29] border border-slate-400/12 hover:border-[#E5A93C]/50 rounded-2xl p-5 flex flex-col justify-between gap-4 cursor-pointer transition-colors"
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-3">
@@ -2485,7 +2445,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                     </span>
                   ) : isPreviewCourse ? (
                     <span className="text-[11px] font-semibold text-[#2EB88A] shrink-0 font-mono tabular-nums">
-                      1 Free Preview · {totalVars} Lines
+                      Free lesson
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2EB88A] shrink-0">
@@ -2531,12 +2491,12 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
                       ? 'Preview Free Line'
                       : unlocked
                       ? 'Learn & Perfect Lines'
-                      : 'Unlock with Checkmate Pro'}
+                      : 'Unlock course · Pro'}
                   </span>
                   <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
                 </div>
               </div>
-            </motion.div>
+            </motion.button>
           );
         })}
       </div>
